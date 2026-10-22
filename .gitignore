@@ -17,3 +17,12 @@ __pycache__
 *.sh.local
 .env*
 .ot/bin/*
+
+# Test & Coverage
+.coverage
+.coverage.*
+htmlcov/
+*.lcov
+.pytest_cache/
+
+## === End of Inital .gitignore === ##

@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export PYTHONPATH="${REPO_ROOT}/src:${PYTHONPATH:-}"
+
+cd "${REPO_ROOT}"
+
+echo "=== Running Tests with Coverage ==="
+if command -v pytest >/dev/null 2>&1; then
+    pytest tests --cov=src/ot --cov-report=term --cov-report=html:htmlcov --cov-report=lcov:coverage.lcov "$@"
+elif python3 -m coverage --version >/dev/null 2>&1; then
+    python3 -m coverage run --source=src/ot -m unittest discover -s tests
+    python3 -m coverage report
+    python3 -m coverage html -d htmlcov
+    python3 -m coverage lcov -o coverage.lcov
+else
+    echo "Neither pytest nor coverage module found."
+    echo "Install dependencies with: pip install -r requirements-dev.txt"
+    exit 1
+fi
+
+echo "=== Coverage Summary ==="
+echo "HTML report: ${REPO_ROOT}/htmlcov/index.html"
+echo "LCOV report: ${REPO_ROOT}/coverage.lcov"

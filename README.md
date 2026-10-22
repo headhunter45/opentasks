@@ -46,10 +46,15 @@ Open Tasks self-hosts its own task tracking directly within this repository usin
 ./otw task status "My New Feature" in_progress
 ```
 
-### Running Unit Tests
-
+### Running Unit Tests & Coverage
+ 
 ```bash
+# Standard library test runner
 PYTHONPATH=src python3 -m unittest discover -s tests
+
+# Run tests with HTML and LCOV coverage reports
+pip install -r requirements-dev.txt
+./scripts/test-coverage
 ```
 
 ---
