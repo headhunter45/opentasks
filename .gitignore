@@ -16,3 +16,4 @@ __pycache__
 # Local Environment Overrides
 *.sh.local
 .env*
+.ot/bin/*
