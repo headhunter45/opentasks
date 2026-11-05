@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import zipfile
 from typing import Any, Dict, Optional
 
 from ot import __version__ as DEFAULT_LAUNCHER_VERSION
@@ -39,24 +40,101 @@ if exist "%BIN%" (
 """
 
 
+def _running_zipapp() -> Optional[Path]:
+    """Return the on-disk archive if ``ot`` is executing from inside a .zipapp.
+
+    When distributed as a .zipapp (e.g. the globally installed
+    ``~/.local/bin/ot``, or a project's ``.ot/bin/ot.zipapp``), the ``ot``
+    modules are served by ``zipimport`` and there is no ``src/ot`` tree on
+    disk beside the binary. Detecting this lets ``init`` install the project
+    binary by copying the running artifact instead of trying to rebuild from a
+    source tree that isn't present next to it.
+    """
+    import sys
+
+        # A packaged ``ot`` is served by ``zipimport.ZipImporter``, whose
+        # ``.archive`` attribute is the on-disk archive path we can copy.
+    ot_module = sys.modules.get("ot")
+    if ot_module is not None:
+        loader = getattr(ot_module, "__loader__", None)
+        archive = getattr(loader, "archive", None)
+        if archive:
+            return Path(archive)
+
+        # The program we launched as, if it is a zip/zipapp (content check, so the
+    # extension/name is irrelevant: covers the extensionless global `ot`).
+    argv0 = sys.argv[0] if sys.argv else ""
+    if argv0 and os.path.isfile(argv0) and zipfile.is_zipfile(argv0):
+        return Path(argv0)
+    return None
+
+
+def _install_running_artifact(
+    archive: Path, out_zipapp: Path, version: str
+) -> Path:
+    """Copy the running .zipapp into the project's .ot/bin/ and write its manifest."""
+    archive = Path(archive)
+    out_zipapp = Path(out_zipapp)
+
+    shutil.copy2(archive, out_zipapp)
+    if os.access(archive, os.X_OK):
+        out_zipapp.chmod(0o755)
+
+        # Mirror the manifest shape build_zipapp_artifact writes so that
+    # discover_installed_version / version validation behave identically.
+    from ot.models import now_iso  # local import: avoid a module-level cycle
+    manifest = ReleaseManifest(
+        version=version,
+        build_date=now_iso(),
+        sha256=compute_sha256(out_zipapp),
+        artifact_name=out_zipapp.name,
+    )
+    manifest_path = out_zipapp.parent / f"{out_zipapp.stem}-manifest.json"
+    manifest_path.write_text(json.dumps(manifest.to_dict(), indent=2), encoding="utf-8")
+    return out_zipapp
+
+
 def install_project_binary(
     project_root: Path,
     version: str,
     src_dir: Optional[Path | str] = None,
 ) -> Path:
-    """Install Open Tasks executable zipapp and manifest into .ot/bin/."""
+    """Install Open Tasks executable zipapp and manifest into .ot/bin/.
+
+    Resolution order:
+      1. An explicit ``src_dir`` builds the artifact from that source tree.
+      2. If ``ot`` is running from a distributed .zipapp, that very artifact is
+         copied into the project — the running binary *is* the source, so no
+         source tree needs to exist beside it.
+      3. Otherwise (a developer source checkout) the local ``src/ot`` tree is
+         discovered and built.
+    """
     bin_dir = project_root / ".ot" / "bin"
     bin_dir.mkdir(parents=True, exist_ok=True)
     out_zipapp = bin_dir / "ot.zipapp"
 
-    # If src_dir is provided or exists, build directly; otherwise locate package
-    if not src_dir:
-        # Check current repo src or package root
-        candidate = Path(__file__).resolve().parent.parent
-        if (candidate / "ot").is_dir():
-            src_dir = candidate
-        else:
-            src_dir = Path(__file__).resolve().parent.parent.parent / "src"
+    # 1. Explicit source directory always wins: build from source.
+    if src_dir:
+        build_zipapp_artifact(src_dir, out_zipapp, version)
+        return out_zipapp
+
+    # 2. Running as a distributed .zipapp: copy the running artifact itself.
+    archive = _running_zipapp()
+    if archive is not None:
+        return _install_running_artifact(archive, out_zipapp, version)
+
+    # 3. Developer source checkout: locate the package and build.
+    candidate = Path(__file__).resolve().parent.parent
+    if (candidate / "ot").is_dir():
+        src_dir = candidate
+    else:
+        src_dir = Path(__file__).resolve().parent.parent.parent / "src"
+    if not (src_dir / "ot").is_dir():
+        raise FileNotFoundError(
+            f"Cannot locate the 'ot' source package to build a project binary "
+            f"from {src_dir}. Install 'ot' so the global binary ships as a "
+            f".zipapp, or pass --src-dir."
+        )
 
     build_zipapp_artifact(src_dir, out_zipapp, version)
     return out_zipapp
