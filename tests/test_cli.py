@@ -41,6 +41,50 @@ class TestCLICommands(unittest.TestCase):
         self.assertIsInstance(data, list)
         self.assertEqual(len(data), 4)
 
+    def test_cli_task_list_multi_column_and_prefix_filtering(self):
+        # Sample project has:
+        # - Release Alpha: epic, in_progress
+        # - Implement User Authentication: feature, in_progress
+        # - Fix Login Crash on Null Password: bug, triage
+        # - Setup Continuous Integration Pipeline: chore, planned
+
+        # Repeated flags: -s triage -s in_progress -s planned (OR within status)
+        buf1 = io.StringIO()
+        with redirect_stdout(buf1):
+            ret = main(["-C", str(self.root), "task", "list", "-s", "triage", "-s", "in_progress", "-s", "planned", "--json"])
+        self.assertEqual(ret, 0)
+        data1 = json.loads(buf1.getvalue())
+        self.assertEqual(len(data1), 4)
+
+        # Comma-separated flags: -s triage,in_progress,planned
+        buf2 = io.StringIO()
+        with redirect_stdout(buf2):
+            ret = main(["-C", str(self.root), "task", "list", "-s", "triage,in_progress,planned", "--json"])
+        self.assertEqual(ret, 0)
+        data2 = json.loads(buf2.getvalue())
+        self.assertEqual(len(data2), 4)
+
+        # AND across columns, OR within column: -s triage,planned -t bug,chore
+        buf3 = io.StringIO()
+        with redirect_stdout(buf3):
+            ret = main(["-C", str(self.root), "task", "list", "-s", "triage,planned", "-t", "bug,chore", "--json"])
+        self.assertEqual(ret, 0)
+        data3 = json.loads(buf3.getvalue())
+        titles3 = {item["title"] for item in data3}
+        self.assertEqual(titles3, {"Fix Login Crash on Null Password", "Setup Continuous Integration Pipeline"})
+
+        # Prefix matching from start of column value: -s tr,lan,in matches triage and in_progress, not planned
+        buf4 = io.StringIO()
+        with redirect_stdout(buf4):
+            ret = main(["-C", str(self.root), "task", "list", "-s", "tr,lan,in", "--json"])
+        self.assertEqual(ret, 0)
+        data4 = json.loads(buf4.getvalue())
+        titles4 = {item["title"] for item in data4}
+        self.assertEqual(
+            titles4,
+            {"Release Alpha", "Implement User Authentication", "Fix Login Crash on Null Password"},
+        )
+
     def test_cli_task_list_width(self):
         import os
 

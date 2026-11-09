@@ -115,27 +115,63 @@ class WorkItemIndex:
         """Return list of WorkItems that depend on `item` (items blocked by `item`)."""
         return list(self._dependents_by_dep.get(item.id, []))
 
+    @staticmethod
+    def _normalize_filter_values(val: Optional[str | Iterable[str]]) -> List[str]:
+        if not val:
+            return []
+        raw_items = [val] if isinstance(val, str) else list(val)
+        tokens: List[str] = []
+        for item in raw_items:
+            if not item:
+                continue
+            for part in str(item).split(","):
+                cleaned = part.strip()
+                if cleaned:
+                    tokens.append(cleaned)
+        return tokens
+
     def filter(
         self,
-        item_type: Optional[str] = None,
-        status: Optional[str] = None,
-        size: Optional[str] = None,
-        tag: Optional[str] = None,
-        author_name: Optional[str] = None,
+        item_type: Optional[str | Iterable[str]] = None,
+        status: Optional[str | Iterable[str]] = None,
+        size: Optional[str | Iterable[str]] = None,
+        tag: Optional[str | Iterable[str]] = None,
+        author_name: Optional[str | Iterable[str]] = None,
     ) -> List[WorkItem]:
-        """Filter work items by criteria."""
+        """Filter work items by criteria.
+
+        Multiple values for the same column are OR-ed together.
+        Different columns are AND-ed together.
+        Values support case-insensitive prefix matching from the start of the column value.
+        """
+        type_vals = [v.lower() for v in self._normalize_filter_values(item_type)]
+        status_vals = [v.lower().replace("-", "_") for v in self._normalize_filter_values(status)]
+        size_vals = [v.lower() for v in self._normalize_filter_values(size)]
+        tag_vals = [v.lower() for v in self._normalize_filter_values(tag)]
+        author_vals = [v.lower() for v in self._normalize_filter_values(author_name)]
+
         results = []
         for item in self.all():
-            if item_type and item.type != item_type:
-                continue
-            if status and item.status != status:
-                continue
-            if size and item.meta.size != size:
-                continue
-            if tag and tag not in item.meta.tags:
-                continue
-            if author_name and (not item.meta.author or item.meta.author.name != author_name):
-                continue
+            if type_vals:
+                it_type = (item.type or "").lower()
+                if not any(it_type.startswith(v) for v in type_vals):
+                    continue
+            if status_vals:
+                it_status = (item.status or "").lower().replace("-", "_")
+                if not any(it_status.startswith(v) for v in status_vals):
+                    continue
+            if size_vals:
+                it_size = (item.meta.size or "").lower()
+                if not it_size or not any(it_size.startswith(v) for v in size_vals):
+                    continue
+            if tag_vals:
+                it_tags = [t.lower() for t in (item.meta.tags or [])]
+                if not any(any(t.startswith(v) for t in it_tags) for v in tag_vals):
+                    continue
+            if author_vals:
+                it_author = (item.meta.author.name if item.meta.author and item.meta.author.name else "").lower()
+                if not it_author or not any(it_author.startswith(v) for v in author_vals):
+                    continue
             results.append(item)
         return results
 

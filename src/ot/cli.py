@@ -688,11 +688,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     # list
     list_p = task_sub.add_parser("list", help="List work items")
-    list_p.add_argument("--status", "-s", type=str, help="Filter by status")
-    list_p.add_argument("--type", "-t", type=str, help="Filter by type")
-    list_p.add_argument("--size", type=str, help="Filter by size")
-    list_p.add_argument("--tag", type=str, help="Filter by tag")
-    list_p.add_argument("--author", type=str, help="Filter by author name")
+    list_p.add_argument("--status", "-s", action="append", help="Filter by status (repeatable or comma-separated)")
+    list_p.add_argument("--type", "-t", action="append", help="Filter by type (repeatable or comma-separated)")
+    list_p.add_argument("--size", action="append", help="Filter by size (repeatable or comma-separated)")
+    list_p.add_argument("--tag", action="append", help="Filter by tag (repeatable or comma-separated)")
+    list_p.add_argument("--author", action="append", help="Filter by author name (repeatable or comma-separated)")
     list_p.add_argument("--width", type=int, default=argparse.SUPPRESS, help="Override output width in columns")
     list_p.add_argument("--json", action="store_true", help="Output in JSON format")
 
