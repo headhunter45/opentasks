@@ -229,10 +229,12 @@ def cmd_task_show(args: argparse.Namespace, config: Config) -> int:
         print(f"\n--- Description ---\n{item.body}")
 
     if item.comments:
+        from ot.templates import get_template
+        comment_tmpl = get_template("shared/comment.md", config.project_root)
         print("\n--- Comments ---")
         for comment in item.comments:
             print()
-            print(comment.to_markdown().strip())
+            print(comment.to_markdown(template_text=comment_tmpl).strip())
 
     return 0
 
@@ -252,6 +254,7 @@ def cmd_task_create(args: argparse.Namespace, config: Config) -> int:
     item_type = args.type or "task"
     status = args.status or "triage"
     size = args.size
+    created_at = now_iso()
 
     author = Author(name=config.user_name, email=config.user_email)
 
@@ -265,21 +268,61 @@ def cmd_task_create(args: argparse.Namespace, config: Config) -> int:
             print(f"Error resolving parent '{args.parent}': {e}", file=sys.stderr)
             return 1
 
-    meta = WorkItemMetadata(
-        id=item_id,
-        title=title,
-        type=item_type,
-        status=status,
-        size=size,
-        author=author,
-        parent=parent_id,
-        created_at=now_iso(),
+    from ot.templates import get_template, render_template
+
+    tmpl_text = (
+        get_template(f"tasks/{item_type}.md", config.project_root)
+        or get_template("tasks/default.md", config.project_root)
     )
+    if tmpl_text:
+        rendered_tmpl = render_template(
+            tmpl_text,
+            {
+                "id": item_id,
+                "title": title,
+                "type": item_type,
+                "status": status,
+                "size": size or "",
+                "created_at": created_at,
+                "author_name": author.name,
+                "author_email": author.email or "",
+            },
+        )
+        item = parse_work_item_content(rendered_tmpl)
+        item.meta.id = item_id
+        item.meta.title = title
+        item.meta.type = item_type
+        item.meta.status = status
+        item.meta.size = size if size else None
+        item.meta.created_at = created_at
+        item.meta.author = author
+        item.meta.parent = parent_id
+    else:
+        meta = WorkItemMetadata(
+            id=item_id,
+            title=title,
+            type=item_type,
+            status=status,
+            size=size,
+            author=author,
+            parent=parent_id,
+            created_at=created_at,
+        )
+        body = f"# {title}\n\n## Overview\n\n" if title else ""
+        item = WorkItem(meta=meta, body=body)
 
-    body_overview = args.overview or ""
-    body = f"# {title}\n\n## Overview\n{body_overview}\n" if title else ""
-
-    item = WorkItem(meta=meta, body=body)
+    if args.overview is not None:
+        if "## Overview" in item.body:
+            item.body = re.sub(
+                r"(## Overview\s*\n)(.*?)(?=\n## |\Z)",
+                rf"\g<1>{args.overview}\n\n",
+                item.body,
+                count=1,
+                flags=re.DOTALL,
+            ).rstrip()
+        else:
+            prefix = f"# {title}\n\n" if not item.body.strip() else f"{item.body.rstrip()}\n\n"
+            item.body = f"{prefix}## Overview\n{args.overview}\n"
 
     # Determine file location
     tasks_dir = config.project_root / ".ot" / "tasks"

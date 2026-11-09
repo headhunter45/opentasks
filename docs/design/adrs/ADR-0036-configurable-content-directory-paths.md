@@ -80,3 +80,4 @@ Negative:
 ## Amendments (As-Built)
 
 - **Implementation Tracking**: Implementing `paths.{tasks,meetings,templates}` resolution, containment validation, and adding `paths` to `PROTECTED_CONFIG_KEYS` is tracked in task `97aa42`.
+

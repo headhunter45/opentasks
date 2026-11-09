@@ -209,7 +209,7 @@ def read_work_item(path: Path | str) -> WorkItem:
     return parse_work_item_content(content, file_path=p)
 
 
-def render_work_item(item: WorkItem) -> str:
+def render_work_item(item: WorkItem, project_root: Optional[Path | str] = None) -> str:
     """Render a WorkItem instance to standard markdown with frontmatter, body, and comments."""
     parts = [serialize_yaml_frontmatter(item.meta)]
     if item.body:
@@ -217,11 +217,14 @@ def render_work_item(item: WorkItem) -> str:
         parts.append(item.body.strip())
 
     if item.comments:
+        from ot.templates import get_template
+
+        comment_tmpl = get_template("shared/comment.md", project_root or (item.path.parent if item.path else None))
         parts.append("")
         parts.append("## Comments")
         for comment in item.comments:
             parts.append("")
-            parts.append(comment.to_markdown().strip())
+            parts.append(comment.to_markdown(template_text=comment_tmpl).strip())
 
     parts.append("")  # Trailing newline
     return "\n".join(parts)

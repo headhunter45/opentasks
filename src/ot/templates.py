@@ -265,3 +265,18 @@ def get_template(
             return local_file.read_text(encoding="utf-8")
 
     return DEFAULT_TEMPLATES.get(name)
+
+
+def render_template(template_text: str, context: Dict[str, Optional[str]]) -> str:
+    """Substitute `{{key}}` placeholders in `template_text` with values from `context`."""
+    import re
+
+    def _replace(match: re.Match[str]) -> str:
+        key = match.group(1).strip()
+        if key in context:
+            val = context[key]
+            return "" if val is None else str(val)
+        return match.group(0)
+
+    return re.sub(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}", _replace, template_text)
+

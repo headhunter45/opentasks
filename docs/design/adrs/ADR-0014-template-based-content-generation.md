@@ -66,6 +66,7 @@ Negative:
 - **Installed Template Layout (`src/ot/templates.py`)**:
   - `install_default_templates` installs `tasks/{default,bug,feature,epic,spike,chore}.md`, `meetings/{grooming,planning,retrospective,ideation}.md`, and `shared/comment.md` into `.ot/templates/` using `{{variable}}` placeholders.
   - `get_template` resolves `.ot/templates/<name>` first and falls back to built-in `DEFAULT_TEMPLATES`.
-- **Deferred / Partial Scope**:
-  - While templates are installed and managed during `ot init` and `ot upgrade`, `cmd_task_create` (`src/ot/cli.py`) and `Comment.to_markdown` (`src/ot/models.py`) currently construct initial WorkItem bodies and comments directly in Python rather than rendering `.ot/templates/tasks/<type>.md` or `.ot/templates/shared/comment.md`, and `ot meeting` CLI subcommands are not yet implemented. Wiring content creation to render project templates and implementing meeting subcommands are tracked in tasks `37923d` and `a9baac`.
+- **Rendered Content Creation (`src/ot/templates.py`, `src/ot/cli.py`, `src/ot/models.py`)**:
+  - `cmd_task_create` renders `.ot/templates/tasks/<type>.md` (falling back to `tasks/default.md`) via `render_template()`, and `Comment.to_markdown` renders `.ot/templates/shared/comment.md` (`37923d`).
+  - Implementing `ot meeting` CLI subcommands (`start`, `end`, `list`) using `.ot/templates/meetings/<type>.md` is tracked in task `a9baac`.
 

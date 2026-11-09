@@ -159,11 +159,30 @@ class Comment:
     timestamp: str = field(default_factory=now_iso)
     body: str = ""
 
-    def to_markdown(self) -> str:
+    def to_markdown(self, template_text: Optional[str] = None) -> str:
         """Render comment to markdown format."""
         author_str = self.author.name if self.author else "Anonymous"
         if self.author and self.author.email:
             author_str += f" <{self.author.email}>"
+        if template_text:
+            from ot.templates import render_template
+
+            rendered = render_template(
+                template_text,
+                {
+                    "author_name": author_str,
+                    "author_email": (self.author.email or "") if self.author else "",
+                    "timestamp": self.timestamp,
+                    "comment_id": self.id,
+                    "body": self.body.strip(),
+                },
+            ).strip()
+            if f"<!-- comment-id: {self.id} -->" not in rendered:
+                lines = rendered.splitlines()
+                if lines:
+                    lines.insert(1, f"<!-- comment-id: {self.id} -->")
+                    rendered = "\n".join(lines)
+            return rendered + "\n"
         lines = [
             f"### Comment by {author_str} on {self.timestamp}",
             f"<!-- comment-id: {self.id} -->",
