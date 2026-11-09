@@ -28,10 +28,54 @@ def sanitize_folder_name(title: str) -> str:
     return "".join(w.capitalize() for w in words[:6])
 
 
-def format_task_row(short_id: str, item: WorkItem) -> str:
+def resolve_output_width(
+    args: Optional[argparse.Namespace] = None,
+    config: Optional[Config] = None,
+) -> int:
+    """Resolve CLI output width in columns.
+
+     Precedence:
+      1. Explicit `--width` CLI flag
+      2. Configured `user.outputWidth` / `output.width`
+      3. Terminal width: if interactive / piped (stdin/stdout/stderr tty or COLUMNS)
+         and >= 120, use full terminal width; if < 120, use 80.
+      4. Default fallback when no terminal size is available: 120.
+    """
+    if args is not None and getattr(args, "width", None) is not None:
+        return max(40, int(args.width))
+
+    if config is not None and config.output_width is not None:
+        return max(40, int(config.output_width))
+
+    env_cols = os.environ.get("COLUMNS")
+    if env_cols:
+        try:
+            cols = int(env_cols)
+            if cols > 0:
+                return cols if cols >= 120 else 80
+        except ValueError:
+            pass
+
+    for stream in (sys.stdout, sys.stderr, sys.stdin):
+        try:
+            if hasattr(stream, "fileno"):
+                cols = os.get_terminal_size(stream.fileno()).columns
+                if cols > 0:
+                    return cols if cols >= 120 else 80
+        except Exception:
+            continue
+
+    return 120
+
+
+def format_task_row(short_id: str, item: WorkItem, total_width: int = 120) -> str:
     status_display = item.status.replace("_", "-").capitalize()
     type_display = item.type.capitalize()
-    return f"{short_id:<8} {item.title:<40} {type_display:<12} {status_display:<12}"
+    title_width = max(20, total_width - 35)
+    title_str = item.title
+    if len(title_str) > title_width and title_width > 3:
+        title_str = title_str[: title_width - 3] + "..."
+    return f"{short_id:<8} {title_str:<{title_width}} {type_display:<12} {status_display:<12}"
 
 
 def cmd_task_list(args: argparse.Namespace, config: Config) -> int:
@@ -58,13 +102,15 @@ def cmd_task_list(args: argparse.Namespace, config: Config) -> int:
         print("No work items found.")
         return 0
 
-    header = f"{'ID':<8} {'Title':<40} {'Type':<12} {'Status':<12}"
-    divider = f"{'-'*8} {'-'*40} {'-'*12} {'-'*12}"
+    total_width = resolve_output_width(args, config)
+    title_width = max(20, total_width - 35)
+    header = f"{'ID':<8} {'Title':<{title_width}} {'Type':<12} {'Status':<12}"
+    divider = f"{'-'*8} {'-'*title_width} {'-'*12} {'-'*12}"
     print(header)
     print(divider)
     for item in items:
         short_id = index.get_short_id(item.id)
-        print(format_task_row(short_id, item))
+        print(format_task_row(short_id, item, total_width=total_width))
     return 0
 
 
@@ -599,6 +645,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to project directory (default: discover from cwd)",
     )
     parser.add_argument(
+        "--width",
+        type=int,
+        help="Override output width in columns",
+    )
+    parser.add_argument(
         "--version",
         "-V",
         action="version",
@@ -642,6 +693,7 @@ def build_parser() -> argparse.ArgumentParser:
     list_p.add_argument("--size", type=str, help="Filter by size")
     list_p.add_argument("--tag", type=str, help="Filter by tag")
     list_p.add_argument("--author", type=str, help="Filter by author name")
+    list_p.add_argument("--width", type=int, default=argparse.SUPPRESS, help="Override output width in columns")
     list_p.add_argument("--json", action="store_true", help="Output in JSON format")
 
     # show

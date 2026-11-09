@@ -172,6 +172,16 @@ class Config:
         return self.get("user.editor") or "nano"
 
     @property
+    def output_width(self) -> Optional[int]:
+        val = self.get("user.outputWidth") or self.get("output.width")
+        if val is not None:
+            try:
+                return int(val)
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    @property
     def work_item_types(self) -> Dict[str, Any]:
         return self.get("workItem.types", {})
 

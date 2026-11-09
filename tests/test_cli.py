@@ -41,6 +41,45 @@ class TestCLICommands(unittest.TestCase):
         self.assertIsInstance(data, list)
         self.assertEqual(len(data), 4)
 
+    def test_cli_task_list_width(self):
+        import os
+
+        # Explicit --width 80 sets divider length to 80
+        buf80 = io.StringIO()
+        with redirect_stdout(buf80):
+            ret = main(["-C", str(self.root), "task", "list", "--width", "80"])
+        self.assertEqual(ret, 0)
+        lines80 = buf80.getvalue().splitlines()
+        self.assertEqual(len(lines80[1]), 80)
+
+        # Explicit --width 140 sets divider length to 140
+        buf140 = io.StringIO()
+        with redirect_stdout(buf140):
+            ret = main(["-C", str(self.root), "--width", "140", "task", "list"])
+        self.assertEqual(ret, 0)
+        lines140 = buf140.getvalue().splitlines()
+        self.assertEqual(len(lines140[1]), 140)
+
+        # Terminal width < 120 via COLUMNS defaults to 80; >= 120 uses full width
+        old_cols = os.environ.get("COLUMNS")
+        try:
+            os.environ["COLUMNS"] = "100"
+            buf_narrow = io.StringIO()
+            with redirect_stdout(buf_narrow):
+                main(["-C", str(self.root), "task", "list"])
+            self.assertEqual(len(buf_narrow.getvalue().splitlines()[1]), 80)
+
+            os.environ["COLUMNS"] = "150"
+            buf_wide = io.StringIO()
+            with redirect_stdout(buf_wide):
+                main(["-C", str(self.root), "task", "list"])
+            self.assertEqual(len(buf_wide.getvalue().splitlines()[1]), 150)
+        finally:
+            if old_cols is None:
+                os.environ.pop("COLUMNS", None)
+            else:
+                os.environ["COLUMNS"] = old_cols
+
     def test_cli_task_show(self):
         buf = io.StringIO()
         with redirect_stdout(buf):
