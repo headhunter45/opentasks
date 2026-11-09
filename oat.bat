@@ -13,3 +13,4 @@ if exist "%BIN%" (
 ) else (
     ot %*
 )
+

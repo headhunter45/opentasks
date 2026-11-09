@@ -89,3 +89,4 @@ if [ -f "$LEGACY_BIN" ]; then
 else
     exec ot "$@"
 fi
+
