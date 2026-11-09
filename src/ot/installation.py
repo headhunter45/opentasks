@@ -19,10 +19,91 @@ from ot.version import is_valid_version
 WRAPPER_SCRIPT_SH = """#!/usr/bin/env bash
 set -euo pipefail
 PROJ_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BIN="${PROJ_ROOT}/.ot/bin/ot.zipapp"
 
-if [ -f "$BIN" ]; then
-    exec python3 "$BIN" "$@"
+VERSION="$(python3 -c '
+import json, pathlib
+cfg = pathlib.Path("'"${PROJ_ROOT}"'") / ".ot" / "config.json"
+if cfg.is_file():
+    try:
+        print(json.loads(cfg.read_text(encoding="utf-8")).get("system", {}).get("toolVersion", "") or "")
+    except Exception:
+        pass
+' 2>/dev/null || true)"
+
+if [ -n "$VERSION" ]; then
+    BIN="${PROJ_ROOT}/.ot/bin/${VERSION}/ot.zipapp"
+    if [ ! -f "$BIN" ]; then
+        python3 - "$PROJ_ROOT" "$VERSION" <<'PYEOF' || true
+import hashlib, json, os, pathlib, shutil, sys, tempfile, urllib.request
+
+proj_root = pathlib.Path(sys.argv[1]).resolve()
+version = sys.argv[2].strip().lstrip("v")
+src_dir = proj_root / "src"
+if (src_dir / "ot").is_dir():
+    sys.path.insert(0, str(src_dir))
+    from ot.launcher import ensure_project_binary
+    ensure_project_binary(proj_root)
+    sys.exit(0)
+
+user_home = pathlib.Path(os.getenv("OT_USER_HOME") or "~/.ot").expanduser().resolve()
+cached_zip = user_home / "versions" / version / "ot.zipapp"
+
+def sha256_file(p):
+    h = hashlib.sha256()
+    with open(p, "rb") as f:
+        while chunk := f.read(65536):
+            h.update(chunk)
+    return h.hexdigest()
+
+if not cached_zip.is_file():
+    base_url = (os.getenv("OT_RELEASE_BASE_URL") or f"https://github.com/{os.getenv('OT_GITHUB_REPO', 'headhunter45/opentasks')}/releases/download").rstrip("/")
+    art_url = f"{base_url}/v{version}/ot-{version}.zipapp"
+    sums_url = f"{base_url}/v{version}/SHA256SUMS"
+    with tempfile.TemporaryDirectory() as td:
+        tmp_bin = pathlib.Path(td) / f"ot-{version}.zipapp"
+        with urllib.request.urlopen(art_url, timeout=15) as r:
+            tmp_bin.write_bytes(r.read())
+        actual_sha = sha256_file(tmp_bin)
+        try:
+            with urllib.request.urlopen(sums_url, timeout=15) as r:
+                for line in r.read().decode("utf-8", errors="replace").splitlines():
+                    parts = line.strip().split()
+                    if len(parts) >= 2 and pathlib.Path(parts[1].lstrip("*")).name in (f"ot-{version}.zipapp", "ot.zipapp"):
+                        if parts[0].lower() != actual_sha.lower():
+                            raise ValueError(f"Checksum mismatch for v{version}")
+                        break
+        except ValueError:
+            raise
+        except Exception:
+            pass
+        try:
+            cached_zip.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(tmp_bin, cached_zip)
+            (cached_zip.parent / "ot-manifest.json").write_text(json.dumps({"version": version, "sha256": actual_sha}, indent=2), encoding="utf-8")
+        except OSError:
+            cached_zip = dest_dir / "ot.zipapp"
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(tmp_bin, cached_zip)
+
+dest_dir = proj_root / ".ot" / "bin" / version
+dest_dir.mkdir(parents=True, exist_ok=True)
+dest_zip = dest_dir / "ot.zipapp"
+shutil.copy2(cached_zip, dest_zip)
+dest_zip.chmod(0o755)
+(dest_dir / "ot-manifest.json").write_text(
+    json.dumps({"version": version, "sha256": sha256_file(dest_zip), "artifact_name": "ot.zipapp"}, indent=2),
+    encoding="utf-8",
+)
+PYEOF
+    fi
+    if [ -f "$BIN" ]; then
+        exec python3 "$BIN" "$@"
+    fi
+fi
+
+LEGACY_BIN="${PROJ_ROOT}/.ot/bin/ot.zipapp"
+if [ -f "$LEGACY_BIN" ]; then
+    exec python3 "$LEGACY_BIN" "$@"
 else
     exec ot "$@"
 fi
@@ -30,8 +111,14 @@ fi
 
 WRAPPER_SCRIPT_BAT = """@echo off
 set "PROJ_ROOT=%~dp0"
+for /f "delims=" %%v in ('python -c "import json,pathlib; p=pathlib.Path(r'%PROJ_ROOT%.ot\\config.json'); print(json.loads(p.read_text()).get('system',{}).get('toolVersion','') if p.is_file() else '')" 2^>nul') do set "OT_VER=%%v"
+if defined OT_VER (
+    if exist "%PROJ_ROOT%.ot\\bin\\%OT_VER%\\ot.zipapp" (
+        python "%PROJ_ROOT%.ot\\bin\\%OT_VER%\\ot.zipapp" %*
+        exit /b %ERRORLEVEL%
+    )
+)
 set "BIN=%PROJ_ROOT%.ot\\bin\\ot.zipapp"
-
 if exist "%BIN%" (
     python "%BIN%" %*
 ) else (
@@ -99,7 +186,7 @@ def install_project_binary(
     version: str,
     src_dir: Optional[Path | str] = None,
 ) -> Path:
-    """Install Open Tasks executable zipapp and manifest into .ot/bin/.
+    """Install Open Tasks executable zipapp and manifest into .ot/bin/<version>/.
 
     Resolution order:
       1. An explicit ``src_dir`` builds the artifact from that source tree.
@@ -109,7 +196,7 @@ def install_project_binary(
       3. Otherwise (a developer source checkout) the local ``src/ot`` tree is
          discovered and built.
     """
-    bin_dir = project_root / ".ot" / "bin"
+    bin_dir = project_root / ".ot" / "bin" / version
     bin_dir.mkdir(parents=True, exist_ok=True)
     out_zipapp = bin_dir / "ot.zipapp"
 

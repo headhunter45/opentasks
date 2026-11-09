@@ -121,16 +121,17 @@ The launcher is expected to work across multiple projects.
 Projects install a specific OT implementation beneath:
 
 ```text
-.ot/bin/
+.ot/bin/<version>/
 ```
 
 Example:
 
 ```text
-.ot/bin/ot.py
+.ot/bin/0.1.1/ot.zipapp
+.ot/bin/0.1.1/ot-manifest.json
 ```
 
-Multiple projects may use different versions simultaneously.
+Previously downloaded project versions are preserved in their respective `.ot/bin/<version>/` directories, and `.ot/bin/` is ignored from source control. Multiple projects may use different versions simultaneously.
 
 ---
 

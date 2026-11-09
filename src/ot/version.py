@@ -86,6 +86,39 @@ def discover_installed_version(project_root: Optional[Path | str] = None) -> Opt
     if not root:
         return None
     bin_dir = root / ".ot" / "bin"
+    if not bin_dir.is_dir():
+        return None
+
+    configured = discover_project_version(root)
+    if configured:
+        versioned_manifest = bin_dir / configured / "ot-manifest.json"
+        if versioned_manifest.is_file():
+            try:
+                data = load_json_file(versioned_manifest)
+                return data.get("version")
+            except Exception:
+                pass
+        if (bin_dir / configured / "ot.zipapp").is_file():
+            return configured
+
+    # Check any versioned subdirectories .ot/bin/<ver>/ot-manifest.json
+    found_versions = []
+    for child in bin_dir.iterdir():
+        if child.is_dir():
+            m_file = child / "ot-manifest.json"
+            if m_file.is_file():
+                try:
+                    v = load_json_file(m_file).get("version")
+                    if v and is_valid_version(v):
+                        found_versions.append(v)
+                except Exception:
+                    pass
+    if found_versions:
+        from functools import cmp_to_key
+        found_versions.sort(key=cmp_to_key(compare_versions))
+        return found_versions[-1]
+
+    # Fallback to legacy flat .ot/bin/ot-manifest.json
     manifest_file = bin_dir / "ot-manifest.json"
     if manifest_file.is_file():
         try:

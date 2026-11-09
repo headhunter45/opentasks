@@ -30,7 +30,8 @@ class TestInstallationAndInit(unittest.TestCase):
             self.assertTrue((root / ".ot").is_dir())
             self.assertTrue((root / ".ot" / "config.json").is_file())
             self.assertTrue((root / ".ot" / "templates" / "tasks" / "default.md").is_file())
-            self.assertTrue((root / ".ot" / "bin" / "ot.zipapp").is_file())
+            self.assertTrue((root / ".ot" / "bin" / "0.1.0" / "ot.zipapp").is_file())
+            self.assertTrue((root / ".ot" / "bin" / "0.1.0" / "ot-manifest.json").is_file())
             self.assertTrue((root / "otw").is_file())
             self.assertTrue((root / ".gitignore").is_file())
             self.assertIn(".ot/bin/", (root / ".gitignore").read_text(encoding="utf-8"))
@@ -105,11 +106,11 @@ class TestInstallationAndInit(unittest.TestCase):
                 f"init failed from zipapp:\nSTDOUT: {res.stdout}\nSTDERR: {res.stderr}",
              )
 
-            # The project binary must have been installed...
-            proj_zip = proj / ".ot" / "bin" / "ot.zipapp"
+            # The project binary must have been installed under .ot/bin/<version>/...
+            proj_zip = proj / ".ot" / "bin" / "0.1.1" / "ot.zipapp"
             self.assertTrue(proj_zip.is_file())
             # ...along with its manifest so version discovery works.
-            manifest = proj / ".ot" / "bin" / "ot-manifest.json"
+            manifest = proj / ".ot" / "bin" / "0.1.1" / "ot-manifest.json"
             self.assertTrue(manifest.is_file())
             self.assertEqual(json.loads(manifest.read_text())["version"], "0.1.1")
             # ...and that installed binary must itself run.
