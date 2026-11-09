@@ -365,6 +365,97 @@ class TestCLICommands(unittest.TestCase):
         self.assertEqual(ret3, 0)
         self.assertIn("Removed dependency", buf3.getvalue())
 
+    def test_cli_task_edit_and_create_validation(self):
+        import re
+        import sys
+
+        local_cfg = self.root / ".ot" / "config.local.json"
+        try:
+            # 1. Valid edit in ot task edit updates canonical file
+            editor_script_valid = self.root / "editor_valid.py"
+            editor_script_valid.write_text(
+                "import sys, pathlib\n"
+                "p = pathlib.Path(sys.argv[1])\n"
+                "text = p.read_text()\n"
+                "p.write_text(text.replace('status: planned', 'status: in_progress'))\n",
+                encoding="utf-8",
+            )
+            local_cfg.write_text(
+                json.dumps({"user": {"editor": f"{sys.executable} {editor_script_valid}"}}),
+                encoding="utf-8",
+            )
+
+            out_ok = io.StringIO()
+            err_ok = io.StringIO()
+            with redirect_stdout(out_ok), redirect_stderr(err_ok):
+                ret = main(["-C", str(self.root), "task", "edit", "Setup Continuous Integration Pipeline"])
+            self.assertEqual(ret, 0)
+            self.assertIn("Updated WorkItem", out_ok.getvalue())
+
+            # 2. Invalid edit in ot task edit fails, preserves temp file, leaves canonical file untouched
+            editor_script_invalid = self.root / "editor_invalid.py"
+            editor_script_invalid.write_text(
+                "import sys, pathlib\n"
+                "p = pathlib.Path(sys.argv[1])\n"
+                "text = p.read_text()\n"
+                "p.write_text(text.replace('status: in_progress', 'status: invalid_status_xyz'))\n",
+                encoding="utf-8",
+            )
+            local_cfg.write_text(
+                json.dumps({"user": {"editor": f"{sys.executable} {editor_script_invalid}"}}),
+                encoding="utf-8",
+            )
+
+            out_err = io.StringIO()
+            err_err = io.StringIO()
+            with redirect_stdout(out_err), redirect_stderr(err_err):
+                ret_err = main(["-C", str(self.root), "task", "edit", "Setup Continuous Integration Pipeline"])
+            self.assertEqual(ret_err, 1)
+            err_text = err_err.getvalue()
+            self.assertIn("Invalid status 'invalid_status_xyz'", err_text)
+            self.assertIn("Edited content preserved at:", err_text)
+            m = re.search(r"Edited content preserved at:\s*(.+)", err_text)
+            self.assertIsNotNone(m)
+            preserved_path = Path(m.group(1).strip())
+            self.assertTrue(preserved_path.exists())
+            preserved_path.unlink(missing_ok=True)
+
+            # Verify canonical task still has status: in_progress
+            show_buf = io.StringIO()
+            with redirect_stdout(show_buf):
+                main(["-C", str(self.root), "task", "show", "Setup Continuous Integration Pipeline"])
+            self.assertIn("Status:      in_progress", show_buf.getvalue())
+
+            # 3. Invalid edit in ot task create --edit fails and preserves temp file
+            editor_script_create_invalid = self.root / "editor_create_invalid.py"
+            editor_script_create_invalid.write_text(
+                "import sys, pathlib\n"
+                "p = pathlib.Path(sys.argv[1])\n"
+                "text = p.read_text()\n"
+                "p.write_text(text.replace('type: task', 'type: bogus_type'))\n",
+                encoding="utf-8",
+            )
+            local_cfg.write_text(
+                json.dumps({"user": {"editor": f"{sys.executable} {editor_script_create_invalid}"}}),
+                encoding="utf-8",
+            )
+
+            out_c = io.StringIO()
+            err_c = io.StringIO()
+            with redirect_stdout(out_c), redirect_stderr(err_c):
+                ret_c = main(["-C", str(self.root), "task", "create", "--title", "Bad Edit Task", "--edit"])
+            self.assertEqual(ret_c, 1)
+            err_c_text = err_c.getvalue()
+            self.assertIn("Invalid type 'bogus_type'", err_c_text)
+            self.assertIn("Edited content preserved at:", err_c_text)
+            m2 = re.search(r"Edited content preserved at:\s*(.+)", err_c_text)
+            self.assertIsNotNone(m2)
+            Path(m2.group(1).strip()).unlink(missing_ok=True)
+        finally:
+            local_cfg.unlink(missing_ok=True)
+            for f in ("editor_valid.py", "editor_invalid.py", "editor_create_invalid.py"):
+                (self.root / f).unlink(missing_ok=True)
+
 
 if __name__ == "__main__":
     unittest.main()

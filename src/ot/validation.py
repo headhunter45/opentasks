@@ -184,6 +184,141 @@ class Validator:
         return diagnostics
 
 
+    def validate_single_work_item(
+        self,
+        item: WorkItem,
+        existing_items: Optional[List[WorkItem]] = None,
+    ) -> List[Diagnostic]:
+        """Validate a single WorkItem (e.g. before saving interactive edits)."""
+        diagnostics: List[Diagnostic] = []
+        item_file = item.path or Path("edited-work-item.md")
+
+        valid_types = set(self.config.work_item_types.keys()) if self.config else set()
+        valid_statuses = set(self.config.work_item_statuses.keys()) if self.config else set()
+        valid_sizes = set(self.config.work_item_sizes.keys()) if self.config else set()
+
+        if existing_items is None and self.project_root:
+            scanner = RepositoryScanner(self.project_root)
+            existing_items = scanner.scan_tasks_directory()
+        existing_items = existing_items or []
+
+        other_uuids = {
+            other.id: (other.path or Path("unknown"))
+            for other in existing_items
+            if other.path is None or item.path is None or other.path.resolve() != item.path.resolve()
+        }
+        all_known_uuids = set(other_uuids.keys()) | ({item.id} if item.id else set())
+
+        if not item.id or not is_valid_uuid(item.id):
+            diagnostics.append(
+                Diagnostic(
+                    severity=Severity.ERROR,
+                    category="work_item",
+                    message=f"WorkItem has missing or invalid UUID: '{item.id}'",
+                    file_path=item_file,
+                    item_id=item.id,
+                    is_fixable=False,
+                )
+            )
+        elif item.id in other_uuids:
+            diagnostics.append(
+                Diagnostic(
+                    severity=Severity.ERROR,
+                    category="work_item",
+                    message=f"Duplicate UUID '{item.id}' detected (already used in {other_uuids[item.id]})",
+                    file_path=item_file,
+                    item_id=item.id,
+                    is_fixable=False,
+                )
+            )
+
+        if not item.title or not item.title.strip():
+            diagnostics.append(
+                Diagnostic(
+                    severity=Severity.ERROR,
+                    category="work_item",
+                    message="WorkItem title cannot be empty.",
+                    file_path=item_file,
+                    item_id=item.id,
+                    is_fixable=False,
+                )
+            )
+
+        if valid_types and item.type not in valid_types:
+            diagnostics.append(
+                Diagnostic(
+                    severity=Severity.ERROR,
+                    category="work_item",
+                    message=f"Invalid type '{item.type}'. Expected one of: {', '.join(valid_types)}",
+                    file_path=item_file,
+                    item_id=item.id,
+                    is_fixable=False,
+                )
+            )
+
+        if valid_statuses and item.status not in valid_statuses:
+            diagnostics.append(
+                Diagnostic(
+                    severity=Severity.ERROR,
+                    category="work_item",
+                    message=f"Invalid status '{item.status}'. Expected one of: {', '.join(valid_statuses)}",
+                    file_path=item_file,
+                    item_id=item.id,
+                    is_fixable=False,
+                )
+            )
+
+        if valid_sizes and item.meta.size and item.meta.size not in valid_sizes:
+            diagnostics.append(
+                Diagnostic(
+                    severity=Severity.ERROR,
+                    category="work_item",
+                    message=f"Invalid size '{item.meta.size}'. Expected one of: {', '.join(valid_sizes)}",
+                    file_path=item_file,
+                    item_id=item.id,
+                    is_fixable=False,
+                )
+            )
+
+        if item.id in item.dependencies or item.parent_id == item.id:
+            diagnostics.append(
+                Diagnostic(
+                    severity=Severity.ERROR,
+                    category="work_item",
+                    message=f"WorkItem '{item.title}' cannot depend on or parent itself.",
+                    file_path=item_file,
+                    item_id=item.id,
+                    is_fixable=False,
+                )
+            )
+
+        if item.parent_id and item.parent_id != item.id and item.parent_id not in all_known_uuids:
+            diagnostics.append(
+                Diagnostic(
+                    severity=Severity.ERROR,
+                    category="work_item",
+                    message=f"Broken parent reference: parent UUID '{item.parent_id}' does not exist.",
+                    file_path=item_file,
+                    item_id=item.id,
+                    is_fixable=False,
+                )
+            )
+
+        for dep_id in item.dependencies:
+            if dep_id != item.id and dep_id not in all_known_uuids:
+                diagnostics.append(
+                    Diagnostic(
+                        severity=Severity.ERROR,
+                        category="work_item",
+                        message=f"Broken dependency reference: target UUID '{dep_id}' does not exist.",
+                        file_path=item_file,
+                        item_id=item.id,
+                        is_fixable=False,
+                    )
+                )
+
+        return diagnostics
+
     def validate_work_items(self) -> List[Diagnostic]:
         diagnostics: List[Diagnostic] = []
         if not self.project_root:

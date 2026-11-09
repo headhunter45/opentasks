@@ -2,10 +2,10 @@
 id: 36f1e10b-f6b1-408e-9377-cc2ca391140d
 title: Validate edited WorkItem before saving in ot task edit and ot task create
 type: feature
-status: planned
+status: completed
 size: small
 created_at: 2026-11-09T18:36:45.184117+00:00
-updated_at: 2026-11-09T19:32:00.000000+00:00
+updated_at: 2026-11-09T20:41:51.145822+00:00
 author:
   name: Tom Hicks
   email: headhunter3@gmail.com
@@ -22,3 +22,9 @@ Validate modified frontmatter and relationships when saving interactive edits in
 - [ ] If validation succeeds, remove the temporary file and atomically write the canonical WorkItem file.
 - [ ] Add unit tests covering valid interactive edits and rejected invalid edits (verifying the temp file is preserved and the original file is untouched).
 
+## Comments
+
+### Comment by Tom Hicks <headhunter3@gmail.com> on 2026-11-09T20:41:50.682803+00:00
+<!-- comment-id: 8c1563e8-29d9-4c8b-b8c9-b8a0a7417202 -->
+
+Implemented Validator.validate_single_work_item and wired interactive pre-save validation into ot task edit and ot task create --edit, preserving the temp file path on error.

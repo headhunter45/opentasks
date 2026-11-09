@@ -339,18 +339,39 @@ def cmd_task_create(args: argparse.Namespace, config: Config) -> int:
 
     # If interactive edit requested or title missing without no_edit
     if getattr(args, "edit", False) or (not title and not getattr(args, "no_edit", False)):
-        rendered = render_work_item(item)
+        rendered = render_work_item(item, project_root=config.project_root)
         with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as tf:
             tf.write(rendered)
             tf_path = tf.name
 
         editor = config.editor
+        preserve_temp = False
         try:
             subprocess.run(f"{editor} {tf_path}", shell=True, check=True)
             new_content = Path(tf_path).read_text(encoding="utf-8")
             item = parse_work_item_content(new_content)
+            validator = Validator(config.project_root)
+            diags = validator.validate_single_work_item(item)
+            errors = [d for d in diags if d.severity == Severity.ERROR]
+            if errors:
+                preserve_temp = True
+                print("Error: Validation failed for edited WorkItem:", file=sys.stderr)
+                for err in errors:
+                    print(f"  - {err.message}", file=sys.stderr)
+                print(f"Edited content preserved at: {tf_path}", file=sys.stderr)
+                return 1
+            if not title and item.title:
+                folder_name = sanitize_folder_name(item.title)
+                if parent_id:
+                    parent_item = load_index(config.project_root).get_by_id(parent_id)
+                    if parent_item and parent_item.path:
+                        target_path = parent_item.path.parent / folder_name / "index.md"
+                    else:
+                        target_path = tasks_dir / folder_name / "index.md"
+                else:
+                    target_path = tasks_dir / folder_name / "index.md"
         finally:
-            if os.path.exists(tf_path):
+            if not preserve_temp and os.path.exists(tf_path):
                 os.remove(tf_path)
 
     written = write_work_item(item, target_path)
@@ -373,22 +394,33 @@ def cmd_task_edit(args: argparse.Namespace, config: Config) -> int:
         return 1
 
     # Write copy to temporary file
-    rendered = render_work_item(item)
+    rendered = render_work_item(item, project_root=config.project_root)
     with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as tf:
         tf.write(rendered)
         tf_path = tf.name
 
     editor = config.editor
+    preserve_temp = False
     try:
         subprocess.run(f"{editor} {tf_path}", shell=True, check=True)
         new_content = Path(tf_path).read_text(encoding="utf-8")
         updated_item = parse_work_item_content(new_content, file_path=item.path)
+        validator = Validator(config.project_root)
+        diags = validator.validate_single_work_item(updated_item)
+        errors = [d for d in diags if d.severity == Severity.ERROR]
+        if errors:
+            preserve_temp = True
+            print("Error: Validation failed for edited WorkItem:", file=sys.stderr)
+            for err in errors:
+                print(f"  - {err.message}", file=sys.stderr)
+            print(f"Edited content preserved at: {tf_path}", file=sys.stderr)
+            return 1
         updated_item.meta.updated_at = now_iso()
         write_work_item(updated_item)
         print(f"Updated WorkItem {index.get_short_id(item.id)} ({updated_item.title})")
         return 0
     finally:
-        if os.path.exists(tf_path):
+        if not preserve_temp and os.path.exists(tf_path):
             os.remove(tf_path)
 
 
