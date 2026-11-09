@@ -1,7 +1,7 @@
 {
   "system": {
     "configSchemaVersion": 1,
-    "toolVersion": "0.1.4"
+    "toolVersion": "0.1.5"
   },
   "project": {
     "name": "Open Tasks",

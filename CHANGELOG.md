@@ -1,14 +1,2 @@
-# Changes for version v0.1.5
-
-- Update ADRs with As-Built Amendments policy and document implementation variances (`ef4843`).
-- Define ADR-0031 through ADR-0036 resolving open design questions and create implementation tasks (`ccaf06`).
-- Render `.ot/templates/` during WorkItem and comment creation (`37923d`).
-- Validate edited WorkItem before saving in `ot task edit` and `ot task create` (`36f1e1`).
-- Expand configuration validation and automatic repair in `ot check` (`a9c5de`).
-- Support configurable directory layout overrides in `.ot/config.json` (`97aa42`).
-
-
-
-
-
+# Changes for version v0.2.0
 
