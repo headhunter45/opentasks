@@ -140,6 +140,32 @@ def install_project_binary(
     return out_zipapp
 
 
+def _ensure_gitignore_entry(project_root: Path) -> None:
+    """Ensure .ot/bin/ is ignored in the project's .gitignore file."""
+    gitignore_path = project_root / ".gitignore"
+    accepted_entries = {
+        ".ot/bin",
+        ".ot/bin/",
+        ".ot/bin/*",
+        "/.ot/bin",
+        "/.ot/bin/",
+        "/.ot/bin/*",
+    }
+    if gitignore_path.is_file():
+        content = gitignore_path.read_text(encoding="utf-8")
+        existing_lines = {
+            line.strip()
+            for line in content.splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        }
+        if existing_lines & accepted_entries:
+            return
+        prefix = "" if (not content or content.endswith("\n")) else "\n"
+        gitignore_path.write_text(f"{content}{prefix}.ot/bin/\n", encoding="utf-8")
+    else:
+        gitignore_path.write_text(".ot/bin/\n", encoding="utf-8")
+
+
 def init_project(
     target_dir: Path | str,
     project_name: Optional[str] = None,
@@ -156,6 +182,9 @@ def init_project(
     # 1. Create directory structure
     for sub in ["tasks", "meetings", "templates", "bin"]:
         (ot_dir / sub).mkdir(parents=True, exist_ok=True)
+
+    # Ensure .ot/bin/ is ignored by git
+    _ensure_gitignore_entry(root)
 
     tool_version = version or DEFAULT_LAUNCHER_VERSION
     if not is_valid_version(tool_version):

@@ -32,10 +32,26 @@ class TestInstallationAndInit(unittest.TestCase):
             self.assertTrue((root / ".ot" / "templates" / "tasks" / "default.md").is_file())
             self.assertTrue((root / ".ot" / "bin" / "ot.zipapp").is_file())
             self.assertTrue((root / "otw").is_file())
+            self.assertTrue((root / ".gitignore").is_file())
+            self.assertIn(".ot/bin/", (root / ".gitignore").read_text(encoding="utf-8"))
 
             cfg_data = json.loads((root / ".ot" / "config.json").read_text(encoding="utf-8"))
             self.assertEqual(cfg_data["system"]["toolVersion"], "0.1.0")
             self.assertEqual(cfg_data["project"]["name"], "Demo Init")
+
+    def test_init_project_updates_existing_gitignore_idempotently(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            gitignore = root / ".gitignore"
+            gitignore.write_text("node_modules/\n.DS_Store", encoding="utf-8")
+
+            init_project(target_dir=root, install_binary=False, create_wrappers=False)
+            content = gitignore.read_text(encoding="utf-8")
+            self.assertEqual(content, "node_modules/\n.DS_Store\n.ot/bin/\n")
+
+            # Running init again must not duplicate .ot/bin/
+            init_project(target_dir=root, install_binary=False, create_wrappers=False)
+            self.assertEqual(gitignore.read_text(encoding="utf-8"), content)
 
     def test_cli_init_command(self):
         with tempfile.TemporaryDirectory() as tmpdir:
