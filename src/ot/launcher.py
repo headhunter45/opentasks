@@ -12,8 +12,28 @@ from ot.config import load_config, load_json_file
 from ot.discovery import find_project_root
 
 
-def find_project_binary(project_root: Path) -> Optional[Path]:
-    """Find the project-installed Open Tasks executable beneath .ot/bin/."""
+def find_project_binary(project_root: Path, version: Optional[str] = None) -> Optional[Path]:
+    """Find the project-installed Open Tasks executable beneath .ot/bin/<version>/."""
+    cfg_ver = version if version is not None else get_configured_version(project_root)
+    if cfg_ver:
+        ver_candidates = [
+            project_root / ".ot" / "bin" / cfg_ver / "ot.zipapp",
+            project_root / ".ot" / "bin" / cfg_ver / "ot.py",
+            project_root / ".ot" / "bin" / cfg_ver / "ot",
+        ]
+        for c in ver_candidates:
+            if c.is_file():
+                return c
+
+        # Check legacy flat .ot/bin/ only if its manifest matches cfg_ver (or no manifest exists)
+        legacy_manifest = project_root / ".ot" / "bin" / "ot-manifest.json"
+        if legacy_manifest.is_file():
+            try:
+                if load_json_file(legacy_manifest).get("version") != cfg_ver:
+                    return None
+            except Exception:
+                return None
+
     candidates = [
         project_root / ".ot" / "bin" / "ot.zipapp",
         project_root / ".ot" / "bin" / "ot.py",
@@ -23,6 +43,41 @@ def find_project_binary(project_root: Path) -> Optional[Path]:
         if c.is_file():
             return c
     return None
+
+
+def ensure_project_binary(project_root: Path) -> Optional[Path]:
+    """Ensure the configured project version is installed in .ot/bin/<version>/ot.zipapp.
+
+    If `system.toolVersion` in `.ot/config.json` is not yet installed in `.ot/bin/<version>/`,
+    checks `~/.ot/versions/<version>/` cache first, downloads from GitHub Releases (with
+    SHA256SUMS verification) if not cached, and installs it into `.ot/bin/<version>/`.
+    """
+    cfg_ver = get_configured_version(project_root)
+    if cfg_ver:
+        versioned_bin = project_root / ".ot" / "bin" / cfg_ver / "ot.zipapp"
+        if versioned_bin.is_file():
+            return versioned_bin
+
+        # If a legacy flat binary without version mismatch exists and auto-download isn't needed
+        existing = find_project_binary(project_root, cfg_ver)
+        if existing is not None:
+            return existing
+
+        from ot.upgrade import fetch_version_artifact, install_artifact_to_project_bin
+        from ot.version import is_valid_version
+
+        if is_valid_version(cfg_ver):
+            try:
+                artifact = fetch_version_artifact(cfg_ver)
+                return install_artifact_to_project_bin(project_root, cfg_ver, artifact)
+            except Exception as e:
+                print(
+                    f"Warning: Failed to install configured Open Tasks v{cfg_ver}: {e}",
+                    file=sys.stderr,
+                )
+                return None
+
+    return find_project_binary(project_root)
 
 
 def get_configured_version(project_root: Path) -> Optional[str]:
@@ -116,8 +171,8 @@ def run_launcher(args: Optional[List[str]] = None, start_dir: Optional[Path | st
         from ot.cli import main as cli_main
         return cli_main(args)
 
-    # Check for project-installed implementation beneath .ot/bin/
-    project_bin = find_project_binary(proj_root)
+    # Check for (or auto-download) project-installed implementation beneath .ot/bin/<version>/
+    project_bin = ensure_project_binary(proj_root)
     if project_bin and not _is_running_binary(project_bin):
         return launch_project_binary(project_bin, args)
 

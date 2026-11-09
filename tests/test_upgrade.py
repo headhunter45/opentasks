@@ -67,9 +67,42 @@ class TestUpgradeSystem(unittest.TestCase):
         cfg = json.loads((proj_dir / ".ot" / "config.json").read_text(encoding="utf-8"))
         self.assertEqual(cfg["system"]["toolVersion"], "0.2.0")
 
-        # Verify binary manifest was updated
-        manifest = json.loads((proj_dir / ".ot" / "bin" / "ot-manifest.json").read_text(encoding="utf-8"))
+        # Verify new versioned binary and manifest were installed AND old version was preserved
+        self.assertTrue((proj_dir / ".ot" / "bin" / "0.1.0" / "ot.zipapp").is_file())
+        self.assertTrue((proj_dir / ".ot" / "bin" / "0.2.0" / "ot.zipapp").is_file())
+        manifest = json.loads(
+            (proj_dir / ".ot" / "bin" / "0.2.0" / "ot-manifest.json").read_text(encoding="utf-8")
+        )
         self.assertEqual(manifest["version"], "0.2.0")
+
+    def test_download_version_artifact_with_sha256sums(self):
+        from ot.cache import download_version_artifact
+
+        src_dir = Path(__file__).resolve().parent.parent / "src"
+        release_dir = self.root / "releases" / "v0.3.0"
+        release_dir.mkdir(parents=True)
+        artifact_file = release_dir / "ot-0.3.0.zipapp"
+        manifest = build_zipapp_artifact(src_dir, artifact_file, "0.3.0")
+        (release_dir / "SHA256SUMS").write_text(
+            f"{manifest.sha256}  ot-0.3.0.zipapp\n", encoding="utf-8"
+        )
+
+        base_url = (self.root / "releases").as_uri()
+        cached_path = download_version_artifact("0.3.0", base_url=base_url)
+        self.assertTrue(cached_path.is_file())
+        self.assertEqual(cached_path, get_cached_version_path("0.3.0"))
+
+        # Corrupt SHA256SUMS and verify ChecksumMismatchError is raised
+        release_bad = self.root / "releases" / "v0.3.1"
+        release_bad.mkdir(parents=True)
+        bad_artifact = release_bad / "ot-0.3.1.zipapp"
+        build_zipapp_artifact(src_dir, bad_artifact, "0.3.1")
+        (release_bad / "SHA256SUMS").write_text(
+            "0000000000000000000000000000000000000000000000000000000000000000  ot-0.3.1.zipapp\n",
+            encoding="utf-8",
+        )
+        with self.assertRaises(ChecksumMismatchError):
+            download_version_artifact("0.3.1", base_url=base_url)
 
     def test_upgrade_downgrade_rejection(self):
         proj_dir = self.root / "my_project_downgrade"

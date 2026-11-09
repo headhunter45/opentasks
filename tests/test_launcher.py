@@ -91,6 +91,90 @@ class TestGlobalLauncher(unittest.TestCase):
         )
         self.assertEqual(res_direct.returncode, 0)
 
+    def test_auto_download_on_config_version_change_in_ot_and_otw(self):
+        """Regression for 65e194: updating system.toolVersion in .ot/config.json
+        and running `ot task list` or `./otw task list` must automatically download
+        and install `.ot/bin/<version>/ot.zipapp` + manifest while preserving old versions.
+        """
+        import json
+        import os
+        import subprocess
+        import sys
+        from ot.installation import init_project
+
+        src_dir = Path(__file__).resolve().parent.parent / "src"
+        proj_dir = self.root / "auto_dl_project"
+        init_project(proj_dir, version="0.1.0")
+        self.assertTrue((proj_dir / ".ot" / "bin" / "0.1.0" / "ot.zipapp").is_file())
+
+        # Prepare simulated GitHub Releases hosting v0.2.0 and v0.3.0
+        releases_root = self.root / "releases"
+        for ver in ("0.2.0", "0.3.0"):
+            rdir = releases_root / f"v{ver}"
+            rdir.mkdir(parents=True)
+            art = rdir / f"ot-{ver}.zipapp"
+            m = build_zipapp_artifact(src_dir, art, ver)
+            (rdir / "SHA256SUMS").write_text(f"{m.sha256}  ot-{ver}.zipapp\n", encoding="utf-8")
+
+        # Build global `ot` zipapp
+        global_ot = self.root / "global-bin" / "ot"
+        build_zipapp_artifact(src_dir, global_ot, "0.1.0")
+
+        env = dict(os.environ)
+        env.pop("PYTHONPATH", None)
+        env["OT_USER_HOME"] = str(self.root / "user_ot_home")
+        env["OT_RELEASE_BASE_URL"] = releases_root.as_uri()
+        env["OT_DISABLE_SOURCE_FALLBACK"] = "1"
+
+        # 1. Update config.json to 0.2.0 and run global `ot task list`
+        cfg_file = proj_dir / ".ot" / "config.json"
+        cfg = json.loads(cfg_file.read_text(encoding="utf-8"))
+        cfg["system"]["toolVersion"] = "0.2.0"
+        cfg_file.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+
+        res_ot = subprocess.run(
+            [sys.executable, str(global_ot), "task", "list"],
+            cwd=str(proj_dir),
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        self.assertEqual(
+            res_ot.returncode,
+            0,
+            f"ot task list failed:\nSTDOUT: {res_ot.stdout}\nSTDERR: {res_ot.stderr}",
+        )
+        self.assertTrue((proj_dir / ".ot" / "bin" / "0.2.0" / "ot.zipapp").is_file())
+        self.assertTrue((proj_dir / ".ot" / "bin" / "0.2.0" / "ot-manifest.json").is_file())
+        # Old version 0.1.0 is preserved
+        self.assertTrue((proj_dir / ".ot" / "bin" / "0.1.0" / "ot.zipapp").is_file())
+        # Global cache was populated
+        self.assertTrue(
+            (Path(env["OT_USER_HOME"]) / "versions" / "0.2.0" / "ot.zipapp").is_file()
+        )
+
+        # 2. Update config.json to 0.3.0 and run `./otw task list`
+        cfg["system"]["toolVersion"] = "0.3.0"
+        cfg_file.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+
+        res_otw = subprocess.run(
+            [str(proj_dir / "otw"), "task", "list"],
+            cwd=str(proj_dir),
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        self.assertEqual(
+            res_otw.returncode,
+            0,
+            f"./otw task list failed:\nSTDOUT: {res_otw.stdout}\nSTDERR: {res_otw.stderr}",
+        )
+        self.assertTrue((proj_dir / ".ot" / "bin" / "0.3.0" / "ot.zipapp").is_file())
+        self.assertTrue((proj_dir / ".ot" / "bin" / "0.3.0" / "ot-manifest.json").is_file())
+        self.assertTrue(
+            (Path(env["OT_USER_HOME"]) / "versions" / "0.3.0" / "ot.zipapp").is_file()
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
