@@ -664,6 +664,68 @@ table.download-table tr:hover td {
   color: #fff;
 }
 
+.changelog-card {
+  margin-top: 28px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 24px 28px;
+  box-shadow: var(--shadow-lg);
+}
+
+.changelog-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.changelog-header .phase-badge {
+  margin-bottom: 0;
+}
+
+.changelog-title {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.changelog-list {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.changelog-list li {
+  margin-bottom: 6px;
+}
+
+.changelog-list code {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  background: rgba(15, 23, 42, 0.7);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #38bdf8;
+}
+
+.changelog-empty {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.changelog-empty a {
+  color: #38bdf8;
+  text-decoration: none;
+}
+
+.changelog-empty a:hover {
+  text-decoration: underline;
+}
+
 /* Footer */
 footer {
   border-top: 1px solid var(--border-color);

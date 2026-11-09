@@ -75,11 +75,14 @@ For changes affecting packaging or releases, also run:
 ./scripts/build-release --version 0.0.0-dev
 ```
 
-### Step D: Update Documentation
-Check if the changes affect:
-- [README.md](../../../README.md)
-- Design specifications or ADRs in `docs/design/`
-- The web portal in `web/` (`index.html`, `install.sh`)
+### Step D: Update Documentation & `CHANGELOG.md`
+1. **Update [`CHANGELOG.md`](../../../CHANGELOG.md)** (Mandatory on every completed task):
+   - Append a concise bullet point describing what changed (e.g., `- <concise summary of change> (<ID>)`) under the `# Changes for version ...` heading in `CHANGELOG.md`.
+   - *(Note: `CHANGELOG.md` is used for GitHub Releases and the website, and is manually truncated/reset to the next version heading `# Changes for version vX.Y.(Z+1)` in a `-dev`-tagged commit immediately after each release.)*
+2. Check if the changes affect:
+   - [README.md](../../../README.md)
+   - Design specifications or ADRs in `docs/design/`
+   - The web portal in `web/` (`index.html`, `install.sh`)
 
 Update the corresponding files accordingly.
 
@@ -101,9 +104,9 @@ If any new bugs, edge cases, refactor opportunities, or follow-ups are discovere
 ```
 
 ### Step G: Create Git Commit
-Create a dedicated Git commit for the completed task, including its `.ot/tasks/` changes:
+Create a dedicated Git commit for the completed task, including `CHANGELOG.md` and its `.ot/tasks/` changes:
 ```bash
-git add <modified-files> .ot/
+git add <modified-files> CHANGELOG.md .ot/
 git commit -m "<type>(open-tasks): <concise summary> (<ID>)"
 ```
 *(At least one commit must be made per completed task before moving to the next task).*
