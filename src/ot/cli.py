@@ -375,73 +375,103 @@ def cmd_task_get_dependencies(args: argparse.Namespace, config: Config) -> int:
     return 0
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="ot", description="Open Tasks (ot) CLI")
-    parser.add_argument(
-        "--project-dir",
-        "-C",
-        type=str,
-        help="Path to project directory (default: discover from cwd)",
-    )
+def cmd_task_update(args: argparse.Namespace, config: Config) -> int:
+    """Update frontmatter fields of a WorkItem via CLI flags."""
+    index = load_index(config.project_root)
+    try:
+        item = index.resolve(args.id)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
 
-    subparsers = parser.add_subparsers(dest="category")
+    changed = False
 
-    # ot task ...
-    task_parser = subparsers.add_parser("task", help="WorkItem management")
-    task_sub = task_parser.add_subparsers(dest="command")
+    if getattr(args, "title", None):
+        item.meta.title = args.title
+        changed = True
 
-    # list
-    list_p = task_sub.add_parser("list", help="List work items")
-    list_p.add_argument("--status", "-s", type=str, help="Filter by status")
-    list_p.add_argument("--type", "-t", type=str, help="Filter by type")
-    list_p.add_argument("--size", type=str, help="Filter by size")
-    list_p.add_argument("--tag", type=str, help="Filter by tag")
-    list_p.add_argument("--author", type=str, help="Filter by author name")
-    list_p.add_argument("--json", action="store_true", help="Output in JSON format")
+    if getattr(args, "status", None):
+        new_status = args.status.lower().replace("-", "_")
+        valid_statuses = config.work_item_statuses
+        if valid_statuses and new_status not in valid_statuses:
+            print(
+                f"Error: Invalid status '{args.status}'. Allowed statuses: {', '.join(valid_statuses.keys())}",
+                file=sys.stderr,
+            )
+            return 1
+        item.meta.status = new_status
+        changed = True
 
-    # show
-    show_p = task_sub.add_parser("show", help="Show work item details")
-    show_p.add_argument("id", help="WorkItem ID, short ID, or title")
+    if getattr(args, "type", None):
+        new_type = args.type.lower()
+        valid_types = config.work_item_types
+        if valid_types and new_type not in valid_types:
+            print(
+                f"Error: Invalid type '{args.type}'. Allowed types: {', '.join(valid_types.keys())}",
+                file=sys.stderr,
+            )
+            return 1
+        item.meta.type = new_type
+        changed = True
 
-    # create
-    create_p = task_sub.add_parser("create", help="Create a new work item")
-    create_p.add_argument("positional_title", nargs="?", metavar="title", help="WorkItem title")
-    create_p.add_argument("--title", "-m", type=str, help="WorkItem title")
-    create_p.add_argument("--type", "-t", type=str, default="task", help="WorkItem type")
-    create_p.add_argument("--status", "-s", type=str, default="triage", help="Initial status")
-    create_p.add_argument("--size", type=str, help="WorkItem size")
-    create_p.add_argument("--parent", "-p", type=str, help="Parent WorkItem ID or short ID")
-    create_p.add_argument("--overview", type=str, help="Overview summary")
-    create_p.add_argument("--no-edit", action="store_true", help="Do not launch editor")
-    create_p.add_argument("--edit", action="store_true", help="Launch editor after setup")
+    if getattr(args, "size", None):
+        new_size = args.size.lower()
+        valid_sizes = config.work_item_sizes
+        if valid_sizes and new_size not in valid_sizes:
+            print(
+                f"Error: Invalid size '{args.size}'. Allowed sizes: {', '.join(valid_sizes.keys())}",
+                file=sys.stderr,
+            )
+            return 1
+        item.meta.size = new_size
+        changed = True
 
-    # edit
-    edit_p = task_sub.add_parser("edit", help="Edit a work item")
-    edit_p.add_argument("id", help="WorkItem ID, short ID, or title")
+    if getattr(args, "parent", None) is not None:
+        if args.parent == "" or args.parent.lower() == "none":
+            item.meta.parent = None
+        else:
+            try:
+                parent_item = index.resolve(args.parent)
+                item.meta.parent = parent_item.id
+            except Exception as e:
+                print(f"Error resolving parent '{args.parent}': {e}", file=sys.stderr)
+                return 1
+        changed = True
 
-    # status
-    status_p = task_sub.add_parser("status", help="Update work item status")
-    status_p.add_argument("id", help="WorkItem ID or short ID")
-    status_p.add_argument("status", help="New status value")
+    if getattr(args, "tag", None):
+        tags = list(item.meta.tags or [])
+        raw_tags = args.tag if isinstance(args.tag, list) else [args.tag]
+        for t_group in raw_tags:
+            for t in t_group.split(","):
+                t_clean = t.strip()
+                if t_clean and t_clean not in tags:
+                    tags.append(t_clean)
+        item.meta.tags = tags
+        changed = True
 
-    # comment
-    comment_p = task_sub.add_parser("comment", help="Add comment to work item")
-    comment_p.add_argument("id", help="WorkItem ID or short ID")
-    comment_p.add_argument("message", nargs="?", help="Comment body (optional)")
+    if getattr(args, "overview", None) is not None:
+        if "## Overview" in item.body:
+            item.body = re.sub(
+                r"(## Overview\s*\n)(.*?)(?=\n## |\Z)",
+                rf"\g<1>{args.overview}\n",
+                item.body,
+                count=1,
+                flags=re.DOTALL,
+            )
+        else:
+            prefix = f"# {item.title}\n\n" if not item.body.strip() else f"{item.body.rstrip()}\n\n"
+            item.body = f"{prefix}## Overview\n{args.overview}\n"
+        changed = True
 
-    # add-dependency
-    add_dep_p = task_sub.add_parser("add-dependency", help="Add dependency relationship")
-    add_dep_p.add_argument("child", help="Target child WorkItem ID or short ID")
-    add_dep_p.add_argument("dependency", help="Dependency WorkItem ID or short ID")
+    if not changed:
+        print("Error: No update fields specified.", file=sys.stderr)
+        return 1
 
-    # remove-dependency
-    rm_dep_p = task_sub.add_parser("remove-dependency", help="Remove dependency relationship")
-    rm_dep_p.add_argument("child", help="Target child WorkItem ID or short ID")
-    rm_dep_p.add_argument("dependency", help="Dependency WorkItem ID or short ID")
+    item.meta.updated_at = now_iso()
+    write_work_item(item)
+    print(f"Updated WorkItem {index.get_short_id(item.id)} ({item.title})")
+    return 0
 
-    # get-dependencies
-    get_dep_p = task_sub.add_parser("get-dependencies", help="Get work item dependencies")
-    get_dep_p.add_argument("id", help="WorkItem ID or short ID")
 
 from ot.validation import Diagnostic, Repairer, Severity, Validator
 
@@ -634,6 +664,17 @@ def build_parser() -> argparse.ArgumentParser:
     edit_p = task_sub.add_parser("edit", help="Edit a work item")
     edit_p.add_argument("id", help="WorkItem ID, short ID, or title")
 
+    # update
+    update_p = task_sub.add_parser("update", help="Update work item fields via CLI flags")
+    update_p.add_argument("id", help="WorkItem ID, short ID, or title")
+    update_p.add_argument("--title", "-m", type=str, help="New WorkItem title")
+    update_p.add_argument("--type", "-t", type=str, help="New WorkItem type")
+    update_p.add_argument("--status", "-s", type=str, help="New WorkItem status")
+    update_p.add_argument("--size", type=str, help="New WorkItem size")
+    update_p.add_argument("--parent", "-p", type=str, help="New parent WorkItem ID or short ID")
+    update_p.add_argument("--tag", action="append", help="Tag(s) to add to the WorkItem")
+    update_p.add_argument("--overview", type=str, help="New overview text")
+
     # status
     status_p = task_sub.add_parser("status", help="Update work item status")
     status_p.add_argument("id", help="WorkItem ID or short ID")
@@ -693,6 +734,8 @@ def main(args: Optional[List[str]] = None) -> int:
             return cmd_task_create(parsed, config)
         elif parsed.command == "edit":
             return cmd_task_edit(parsed, config)
+        elif parsed.command == "update":
+            return cmd_task_update(parsed, config)
         elif parsed.command == "status":
             return cmd_task_status(parsed, config)
         elif parsed.command == "comment":

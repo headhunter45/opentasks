@@ -99,6 +99,38 @@ class TestCLICommands(unittest.TestCase):
         self.assertEqual(ret, 0)
         self.assertIn("Updated status", buf.getvalue())
 
+    def test_cli_task_update(self):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            ret = main([
+                "-C",
+                str(self.root),
+                "task",
+                "update",
+                "Setup Continuous Integration Pipeline",
+                "--title",
+                "Setup CI/CD Pipeline",
+                "--status",
+                "in_progress",
+                "--size",
+                "large",
+                "--tag",
+                "ci,devops",
+                "--overview",
+                "Updated CI overview.",
+            ])
+        self.assertEqual(ret, 0)
+        self.assertIn("Updated WorkItem", buf.getvalue())
+
+        buf2 = io.StringIO()
+        with redirect_stdout(buf2):
+            main(["-C", str(self.root), "task", "show", "Setup CI/CD Pipeline"])
+        out = buf2.getvalue()
+        self.assertIn("Title:       Setup CI/CD Pipeline", out)
+        self.assertIn("Status:      in_progress", out)
+        self.assertIn("Size:        large", out)
+        self.assertIn("Updated CI overview.", out)
+
     def test_cli_task_comment(self):
         buf = io.StringIO()
         with redirect_stdout(buf):
