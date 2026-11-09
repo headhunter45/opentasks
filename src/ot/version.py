@@ -53,10 +53,23 @@ def compare_versions(v1: str, v2: str) -> int:
         return -1
     if not pre1 and pre2:
         return 1
-    if pre1 < pre2:
-        return -1
-    if pre1 > pre2:
-        return 1
+    if pre1 and pre2:
+        parts1 = pre1.split(".")
+        parts2 = pre2.split(".")
+        for p1, p2 in zip(parts1, parts2):
+            if p1 == p2:
+                continue
+            if p1.isdigit() and p2.isdigit():
+                return -1 if int(p1) < int(p2) else 1
+            if p1.isdigit():
+                return -1
+            if p2.isdigit():
+                return 1
+            return -1 if p1 < p2 else 1
+        if len(parts1) < len(parts2):
+            return -1
+        if len(parts1) > len(parts2):
+            return 1
     return 0
 
 

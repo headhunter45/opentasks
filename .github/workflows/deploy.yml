@@ -7,6 +7,7 @@ on:
     tags:
       - 'v[0-9]*'
       - '!v*-*'
+      - 'v[0-9]*-rc.[0-9]*'
   workflow_dispatch:
     inputs:
       version:
@@ -33,6 +34,8 @@ jobs:
     outputs:
       version: ${{ steps.resolve_version.outputs.version }}
       is_release: ${{ steps.check_release.outputs.is_release }}
+      is_prerelease: ${{ steps.check_release.outputs.is_prerelease }}
+      deploy_pages: ${{ steps.check_release.outputs.deploy_pages }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -47,13 +50,15 @@ jobs:
       - name: Resolve Version
         id: resolve_version
         run: |
-          RELEASE_TAG_REGEX='^v[0-9]+(\.[0-9]+(\.[0-9]+)?)?$'
+          STABLE_TAG_REGEX='^v[0-9]+(\.[0-9]+(\.[0-9]+)?)?$'
+          RELEASE_TAG_REGEX='^v[0-9]+(\.[0-9]+(\.[0-9]+)?)?(-rc\.[0-9]+)?$'
           if [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
+            VERSION="${VERSION#v}"
           elif [[ "$GITHUB_REF" =~ ^refs/tags/ ]] && [[ "$GITHUB_REF_NAME" =~ $RELEASE_TAG_REGEX ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
           else
-            LATEST_RELEASE_TAG=$(git tag --merged HEAD --sort=-v:refname | grep -E "$RELEASE_TAG_REGEX" | head -n 1 || true)
+            LATEST_RELEASE_TAG=$(git tag --merged HEAD --sort=-v:refname | grep -E "$STABLE_TAG_REGEX" | head -n 1 || true)
             if [ -n "$LATEST_RELEASE_TAG" ]; then
               VERSION="${LATEST_RELEASE_TAG#v}"
             else
@@ -66,17 +71,35 @@ jobs:
       - name: Determine if release should be published
         id: check_release
         run: |
-          RELEASE_TAG_REGEX='^v[0-9]+(\.[0-9]+(\.[0-9]+)?)?$'
+          RELEASE_TAG_REGEX='^v[0-9]+(\.[0-9]+(\.[0-9]+)?)?(-rc\.[0-9]+)?$'
+          VERSION="${{ steps.resolve_version.outputs.version }}"
           FORCE="${{ github.event.inputs.publish_release }}"
-          if [ "$FORCE" = "true" ]; then
-            echo "is_release=true" >> "$GITHUB_OUTPUT"
-          elif [ "$FORCE" = "false" ]; then
-            echo "is_release=false" >> "$GITHUB_OUTPUT"
-          elif [[ "$GITHUB_REF" =~ ^refs/tags/ ]] && [[ "$GITHUB_REF_NAME" =~ $RELEASE_TAG_REGEX ]]; then
-            echo "is_release=true" >> "$GITHUB_OUTPUT"
+
+          if [[ "$VERSION" =~ -rc\.[0-9]+$ ]]; then
+            IS_PRERELEASE="true"
           else
-            echo "is_release=false" >> "$GITHUB_OUTPUT"
+            IS_PRERELEASE="false"
           fi
+
+          if [ "$FORCE" = "true" ]; then
+            IS_RELEASE="true"
+          elif [ "$FORCE" = "false" ]; then
+            IS_RELEASE="false"
+          elif [[ "$GITHUB_REF" =~ ^refs/tags/ ]] && [[ "$GITHUB_REF_NAME" =~ $RELEASE_TAG_REGEX ]]; then
+            IS_RELEASE="true"
+          else
+            IS_RELEASE="false"
+          fi
+
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            DEPLOY_PAGES="false"
+          else
+            DEPLOY_PAGES="true"
+          fi
+
+          echo "is_release=${IS_RELEASE}" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=${IS_PRERELEASE}" >> "$GITHUB_OUTPUT"
+          echo "deploy_pages=${DEPLOY_PAGES}" >> "$GITHUB_OUTPUT"
 
       - name: Run Test Suite
         run: |
@@ -87,6 +110,7 @@ jobs:
           ./scripts/build-release --version "${{ steps.resolve_version.outputs.version }}"
 
       - name: Prepare GitHub Pages Site
+        if: steps.check_release.outputs.deploy_pages == 'true'
         run: |
           mkdir -p _site/docs
           cp -r web/* _site/
@@ -147,6 +171,7 @@ jobs:
           "
 
       - name: Upload Pages Artifact
+        if: steps.check_release.outputs.deploy_pages == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
@@ -156,8 +181,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG_NAME="v${{ steps.resolve_version.outputs.version }}"
-          echo "Publishing GitHub Release for tag: ${TAG_NAME}"
+          VERSION="${{ steps.resolve_version.outputs.version }}"
+          TAG_NAME="v${VERSION}"
+          IS_PRERELEASE="${{ steps.check_release.outputs.is_prerelease }}"
+          echo "Publishing GitHub Release for tag: ${TAG_NAME} (prerelease=${IS_PRERELEASE})"
+
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            RELEASE_TITLE="Open Tasks v${VERSION} (Release Candidate)"
+            CREATE_FLAGS=(--prerelease)
+            EDIT_FLAGS=(--prerelease)
+          else
+            RELEASE_TITLE="Open Tasks v${VERSION}"
+            CREATE_FLAGS=(--latest)
+            EDIT_FLAGS=(--prerelease=false --latest)
+          fi
 
           NOTES_ARGS=(--generate-notes)
           if [ -f CHANGELOG.md ]; then
@@ -167,28 +204,32 @@ jobs:
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             echo "Release $TAG_NAME exists. Updating release assets and notes..."
             if [ -f CHANGELOG.md ]; then
-              gh release edit "$TAG_NAME" --notes-file CHANGELOG.md
+              gh release edit "$TAG_NAME" --title "$RELEASE_TITLE" "${EDIT_FLAGS[@]}" --notes-file CHANGELOG.md
+            else
+              gh release edit "$TAG_NAME" --title "$RELEASE_TITLE" "${EDIT_FLAGS[@]}"
             fi
             gh release upload "$TAG_NAME" \
-              dist/ot-${{ steps.resolve_version.outputs.version }}.zipapp \
+              "dist/ot-${VERSION}.zipapp" \
               dist/ot.zipapp \
-              dist/ot-${{ steps.resolve_version.outputs.version }}-manifest.json \
+              "dist/ot-${VERSION}-manifest.json" \
               dist/ot-manifest.json \
               dist/SHA256SUMS --clobber
           else
             echo "Creating new release $TAG_NAME..."
             gh release create "$TAG_NAME" \
-              dist/ot-${{ steps.resolve_version.outputs.version }}.zipapp \
+              "dist/ot-${VERSION}.zipapp" \
               dist/ot.zipapp \
-              dist/ot-${{ steps.resolve_version.outputs.version }}-manifest.json \
+              "dist/ot-${VERSION}-manifest.json" \
               dist/ot-manifest.json \
               dist/SHA256SUMS \
-              --title "Open Tasks v${{ steps.resolve_version.outputs.version }}" \
+              --title "$RELEASE_TITLE" \
+              "${CREATE_FLAGS[@]}" \
               "${NOTES_ARGS[@]}"
           fi
 
   deploy-pages:
     needs: build-and-publish
+    if: needs.build-and-publish.outputs.deploy_pages == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

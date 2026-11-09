@@ -22,6 +22,8 @@ class TestVersioningAndPackaging(unittest.TestCase):
     def test_semver_parsing_and_comparison(self):
         self.assertTrue(is_valid_version("1.0.0"))
         self.assertTrue(is_valid_version("0.1.0-alpha"))
+        self.assertTrue(is_valid_version("0.5.0-rc.1"))
+        self.assertTrue(is_valid_version("v0.5.0-rc.1"))
         self.assertFalse(is_valid_version("1.0"))
         self.assertFalse(is_valid_version("abc"))
 
@@ -29,6 +31,17 @@ class TestVersioningAndPackaging(unittest.TestCase):
         self.assertEqual(compare_versions("1.0.0", "1.1.0"), -1)
         self.assertEqual(compare_versions("2.0.0", "1.9.9"), 1)
         self.assertEqual(compare_versions("1.0.0-alpha", "1.0.0"), -1)
+        self.assertEqual(compare_versions("0.5.0-rc.1", "0.5.0"), -1)
+        self.assertEqual(compare_versions("0.5.0-rc.1", "0.5.0-rc.2"), -1)
+        self.assertEqual(compare_versions("0.5.0-rc.2", "0.5.0-rc.10"), -1)
+
+    def test_deploy_workflow_supports_rc_tags_without_pages(self):
+        workflow_path = Path(__file__).resolve().parent.parent / ".github" / "workflows" / "deploy.yml"
+        content = workflow_path.read_text(encoding="utf-8")
+        self.assertIn("'v[0-9]*-rc.[0-9]*'", content)
+        self.assertIn("IS_PRERELEASE", content)
+        self.assertIn("--prerelease", content)
+        self.assertIn("if: needs.build-and-publish.outputs.deploy_pages == 'true'", content)
 
     def test_build_zipapp_artifact(self):
         src_dir = Path(__file__).resolve().parent.parent / "src"
