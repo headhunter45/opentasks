@@ -5,7 +5,8 @@ on:
     branches:
       - main
     tags:
-      - 'v*'
+      - 'v[0-9]*'
+      - '!v*-*'
   workflow_dispatch:
     inputs:
       version:
@@ -46,14 +47,18 @@ jobs:
       - name: Resolve Version
         id: resolve_version
         run: |
+          RELEASE_TAG_REGEX='^v[0-9]+(\.[0-9]+(\.[0-9]+)?)?$'
           if [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
-          elif [[ "$GITHUB_REF" =~ ^refs/tags/v[0-9] ]]; then
+          elif [[ "$GITHUB_REF" =~ ^refs/tags/ ]] && [[ "$GITHUB_REF_NAME" =~ $RELEASE_TAG_REGEX ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
-          elif git describe --tags --abbrev=0 >/dev/null 2>&1; then
-            VERSION=$(git describe --tags --abbrev=0 | sed 's/^v//')
           else
-            VERSION=$(python3 -c "import ot; print(ot.__version__)")
+            LATEST_RELEASE_TAG=$(git tag --merged HEAD --sort=-v:refname | grep -E "$RELEASE_TAG_REGEX" | head -n 1 || true)
+            if [ -n "$LATEST_RELEASE_TAG" ]; then
+              VERSION="${LATEST_RELEASE_TAG#v}"
+            else
+              VERSION=$(python3 -c "import ot; print(ot.__version__)")
+            fi
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Resolved version: ${VERSION}"
@@ -61,12 +66,13 @@ jobs:
       - name: Determine if release should be published
         id: check_release
         run: |
+          RELEASE_TAG_REGEX='^v[0-9]+(\.[0-9]+(\.[0-9]+)?)?$'
           FORCE="${{ github.event.inputs.publish_release }}"
           if [ "$FORCE" = "true" ]; then
             echo "is_release=true" >> "$GITHUB_OUTPUT"
           elif [ "$FORCE" = "false" ]; then
             echo "is_release=false" >> "$GITHUB_OUTPUT"
-          elif [[ "$GITHUB_REF" =~ ^refs/tags/v[0-9] ]]; then
+          elif [[ "$GITHUB_REF" =~ ^refs/tags/ ]] && [[ "$GITHUB_REF_NAME" =~ $RELEASE_TAG_REGEX ]]; then
             echo "is_release=true" >> "$GITHUB_OUTPUT"
           else
             echo "is_release=false" >> "$GITHUB_OUTPUT"
