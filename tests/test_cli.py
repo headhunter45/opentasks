@@ -79,6 +79,19 @@ class TestCLICommands(unittest.TestCase):
             main(["-C", str(self.root), "task", "list"])
         self.assertIn("New Test Feature", buf2.getvalue())
 
+    def test_cli_task_create_positional_title(self):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            ret = main(["-C", str(self.root), "task", "create", "Fix Something"])
+        self.assertEqual(ret, 0)
+        self.assertIn("Created WorkItem", buf.getvalue())
+        self.assertIn("Fix Something", buf.getvalue())
+
+        buf2 = io.StringIO()
+        with redirect_stdout(buf2):
+            main(["-C", str(self.root), "task", "show", "Fix Something"])
+        self.assertIn("Title:       Fix Something", buf2.getvalue())
+
     def test_cli_task_status(self):
         buf = io.StringIO()
         with redirect_stdout(buf):

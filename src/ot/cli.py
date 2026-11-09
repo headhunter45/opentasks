@@ -137,7 +137,7 @@ def cmd_task_create(args: argparse.Namespace, config: Config) -> int:
         print("Error: No Open Tasks project found (.ot). Run 'ot init' first.", file=sys.stderr)
         return 1
 
-    title = args.title or ""
+    title = args.title or getattr(args, "positional_title", None) or ""
     if not title and getattr(args, "no_edit", False):
         print("Error: Title is required when --no-edit is specified.", file=sys.stderr)
         return 1
@@ -405,6 +405,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # create
     create_p = task_sub.add_parser("create", help="Create a new work item")
+    create_p.add_argument("positional_title", nargs="?", metavar="title", help="WorkItem title")
     create_p.add_argument("--title", "-m", type=str, help="WorkItem title")
     create_p.add_argument("--type", "-t", type=str, default="task", help="WorkItem type")
     create_p.add_argument("--status", "-s", type=str, default="triage", help="Initial status")
@@ -619,6 +620,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # create
     create_p = task_sub.add_parser("create", help="Create a new work item")
+    create_p.add_argument("positional_title", nargs="?", metavar="title", help="WorkItem title")
     create_p.add_argument("--title", "-m", type=str, help="WorkItem title")
     create_p.add_argument("--type", "-t", type=str, default="task", help="WorkItem type")
     create_p.add_argument("--status", "-s", type=str, default="triage", help="Initial status")
