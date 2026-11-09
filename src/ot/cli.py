@@ -1014,6 +1014,240 @@ def cmd_meeting_list(args: argparse.Namespace, config: Config) -> int:
     return 0
 
 
+def _resolve_owner_document(
+    project_root: Path,
+    owner_query: str,
+) -> tuple[str, Path, Optional[WorkItem], Optional[Meeting]]:
+    """Resolve `owner_query` to a WorkItem or Meeting document on disk."""
+    index = load_index(project_root)
+    try:
+        item = index.resolve(owner_query)
+        if item.path and item.path.is_file():
+            return "work_item", item.path, item, None
+    except Exception:
+        pass
+
+    q = owner_query.strip().lower()
+    dir_matches = [
+        it for it in index.all() if it.path and it.path.parent.name.lower() == q
+    ]
+    if len(dir_matches) == 1 and dir_matches[0].path and dir_matches[0].path.is_file():
+        return "work_item", dir_matches[0].path, dir_matches[0], None
+    meetings = scan_meetings(project_root)
+    matched = [
+        m
+        for m in meetings
+        if m.id.lower().startswith(q)
+        or m.type.lower() == q
+        or (m.path and m.path.parent.name.lower().startswith(q))
+    ]
+    if len(matched) == 1 and matched[0].path and matched[0].path.is_file():
+        return "meeting", matched[0].path, None, matched[0]
+    if len(matched) > 1:
+        raise ValueError(f"Ambiguous meeting identifier '{owner_query}'.")
+    raise ValueError(f"Could not find WorkItem or Meeting matching '{owner_query}'.")
+
+
+def cmd_attachment_add(args: argparse.Namespace, config: Config) -> int:
+    """Copy a file into <OwnerDir>/attachments/ and append a relative Markdown link."""
+    import shutil
+
+    if not config.project_root:
+        print("Error: No Open Tasks project root (.ot) found.", file=sys.stderr)
+        return 1
+
+    src_file = Path(args.file_path).expanduser().resolve()
+    if not src_file.is_file():
+        print(f"Error: Attachment source file not found: {src_file}", file=sys.stderr)
+        return 1
+
+    try:
+        kind, doc_path, item, mtg = _resolve_owner_document(config.project_root, args.owner_id)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    att_dir = doc_path.parent / "attachments"
+    att_dir.mkdir(parents=True, exist_ok=True)
+    dest_file = att_dir / src_file.name
+    if src_file != dest_file:
+        shutil.copy2(src_file, dest_file)
+
+    label = getattr(args, "label", None) or src_file.name
+    is_img = src_file.suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"}
+    rel_target = f"attachments/{src_file.name}"
+    md_link = f"![{label}]({rel_target})" if is_img else f"[{label}]({rel_target})"
+
+    if kind == "work_item" and item:
+        if rel_target not in item.body:
+            item.body = f"{item.body.rstrip()}\n\n{md_link}\n"
+        item.meta.updated_at = now_iso()
+        write_work_item(item)
+    elif kind == "meeting" and mtg:
+        if rel_target not in mtg.body:
+            mtg.body = f"{mtg.body.rstrip()}\n\n{md_link}\n"
+        write_meeting(mtg)
+
+    print(f"Added attachment '{src_file.name}' to {args.owner_id} ({dest_file})")
+    return 0
+
+
+def cmd_attachment_remove(args: argparse.Namespace, config: Config) -> int:
+    """Remove an attachment file and its Markdown reference from the owner document."""
+    if not config.project_root:
+        print("Error: No Open Tasks project root (.ot) found.", file=sys.stderr)
+        return 1
+
+    try:
+        kind, doc_path, item, mtg = _resolve_owner_document(config.project_root, args.owner_id)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    filename = Path(args.filename).name
+    att_file = doc_path.parent / "attachments" / filename
+    removed_any = False
+
+    if att_file.is_file():
+        att_file.unlink()
+        removed_any = True
+
+    link_pattern = re.compile(
+        r"\n*!?\[[^\]]*\]\(attachments/" + re.escape(filename) + r"(?:#[^)]*)?\)\s*"
+    )
+    if kind == "work_item" and item:
+        new_body, count = link_pattern.subn("\n", item.body)
+        if count > 0:
+            item.body = new_body.strip()
+            item.meta.updated_at = now_iso()
+            write_work_item(item)
+            removed_any = True
+    elif kind == "meeting" and mtg:
+        new_body, count = link_pattern.subn("\n", mtg.body)
+        if count > 0:
+            mtg.body = new_body.strip()
+            write_meeting(mtg)
+            removed_any = True
+
+    if not removed_any:
+        print(f"Error: Attachment '{filename}' not found on {args.owner_id}.", file=sys.stderr)
+        return 1
+
+    print(f"Removed attachment '{filename}' from {args.owner_id}")
+    return 0
+
+
+def cmd_attachment_list(args: argparse.Namespace, config: Config) -> int:
+    """List attachments for a WorkItem or Meeting."""
+    if not config.project_root:
+        print("Error: No Open Tasks project root (.ot) found.", file=sys.stderr)
+        return 1
+
+    try:
+        _, doc_path, _, _ = _resolve_owner_document(config.project_root, args.owner_id)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    doc_text = doc_path.read_text(encoding="utf-8")
+    att_dir = doc_path.parent / "attachments"
+    names: set[str] = set()
+    if att_dir.is_dir():
+        for f in att_dir.iterdir():
+            if f.is_file() and not f.name.startswith("."):
+                names.add(f.name)
+    for m in re.finditer(r"!?\[[^\]]*\]\(attachments/([^)#\s]+)", doc_text):
+        names.add(m.group(1))
+
+    entries = []
+    for name in sorted(names):
+        fp = att_dir / name
+        exists = fp.is_file()
+        size = fp.stat().st_size if exists else 0
+        referenced = f"attachments/{name}" in doc_text
+        entries.append(
+            {
+                "name": name,
+                "filename": name,
+                "path": str(fp),
+                "exists": exists,
+                "size": size,
+                "referenced": referenced,
+                "is_image": fp.suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"},
+            }
+        )
+
+    if getattr(args, "json", False):
+        print(json.dumps(entries, indent=2))
+        return 0
+
+    if not entries:
+        print("No attachments found.")
+        return 0
+
+    print(f"{'Filename':<28} {'Size':<10} {'Exists':<8} {'Referenced'}")
+    print("-" * 64)
+    for e in entries:
+        print(
+            f"{e['filename']:<28} {e['size']:<10} {str(e['exists']):<8} {str(e['referenced'])}"
+        )
+    return 0
+
+
+def cmd_attachment_show(args: argparse.Namespace, config: Config) -> int:
+    """Display attachment details and referencing lines in the owner document."""
+    if not config.project_root:
+        print("Error: No Open Tasks project root (.ot) found.", file=sys.stderr)
+        return 1
+
+    try:
+        _, doc_path, _, _ = _resolve_owner_document(config.project_root, args.owner_id)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    filename = Path(args.filename).name
+    fp = doc_path.parent / "attachments" / filename
+    doc_text = doc_path.read_text(encoding="utf-8")
+    ref_lines = [
+        line.strip()
+        for line in doc_text.splitlines()
+        if f"attachments/{filename}" in line
+    ]
+    exists = fp.is_file()
+    if not exists and not ref_lines:
+        print(f"Error: Attachment '{filename}' not found on {args.owner_id}.", file=sys.stderr)
+        return 1
+
+    size = fp.stat().st_size if exists else 0
+    is_img = fp.suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"}
+    if getattr(args, "json", False):
+        print(
+            json.dumps(
+                {
+                    "name": filename,
+                    "filename": filename,
+                    "path": str(fp),
+                    "exists": exists,
+                    "size": size,
+                    "is_image": is_img,
+                    "references": ref_lines,
+                },
+                indent=2,
+            )
+        )
+        return 0
+
+    print(f"Filename:   {filename}")
+    print(f"Path:       {fp}")
+    print(f"Exists:     {exists}")
+    print(f"Size:       {size} bytes")
+    print(f"References: {len(ref_lines)}")
+    for line in ref_lines:
+        print(f"  {line}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     from ot import __version__
     parser = argparse.ArgumentParser(prog="ot", description="Open Tasks (ot) CLI")
@@ -1104,6 +1338,28 @@ def build_parser() -> argparse.ArgumentParser:
     mtg_list_p.add_argument("--type", "-t", help="Filter by meeting type")
     mtg_list_p.add_argument("--json", action="store_true", help="Output in JSON format")
 
+    # ot attachment ...
+    att_parser = subparsers.add_parser("attachment", help="Manage work item and meeting attachments")
+    att_sub = att_parser.add_subparsers(dest="command")
+
+    att_add_p = att_sub.add_parser("add", help="Add an attachment to a WorkItem or Meeting")
+    att_add_p.add_argument("owner_id", help="WorkItem or Meeting ID/title/type")
+    att_add_p.add_argument("file_path", help="Path to file to attach")
+    att_add_p.add_argument("--label", "-l", help="Optional Markdown link label")
+
+    att_rm_p = att_sub.add_parser("remove", help="Remove an attachment from a WorkItem or Meeting")
+    att_rm_p.add_argument("owner_id", help="WorkItem or Meeting ID/title/type")
+    att_rm_p.add_argument("filename", help="Attachment filename")
+
+    att_list_p = att_sub.add_parser("list", help="List attachments for a WorkItem or Meeting")
+    att_list_p.add_argument("owner_id", help="WorkItem or Meeting ID/title/type")
+    att_list_p.add_argument("--json", action="store_true", help="Output in JSON format")
+
+    att_show_p = att_sub.add_parser("show", help="Show details of an attachment")
+    att_show_p.add_argument("owner_id", help="WorkItem or Meeting ID/title/type")
+    att_show_p.add_argument("filename", help="Attachment filename")
+    att_show_p.add_argument("--json", action="store_true", help="Output in JSON format")
+
     # ot task ...
     task_parser = subparsers.add_parser("task", help="WorkItem management")
     task_sub = task_parser.add_subparsers(dest="command")
@@ -1184,6 +1440,8 @@ def build_parser() -> argparse.ArgumentParser:
         cfg_set_p,
         mtg_start_p,
         mtg_end_p,
+        att_add_p,
+        att_rm_p,
         create_p,
         edit_p,
         update_p,
@@ -1278,6 +1536,19 @@ def main(args: Optional[List[str]] = None) -> int:
             return cmd_meeting_end(parsed, config)
         elif parsed.command == "list":
             return cmd_meeting_list(parsed, config)
+        else:
+            parser.print_help()
+            return 1
+
+    if parsed.category == "attachment":
+        if parsed.command == "add":
+            return cmd_attachment_add(parsed, config)
+        elif parsed.command == "remove":
+            return cmd_attachment_remove(parsed, config)
+        elif parsed.command == "list":
+            return cmd_attachment_list(parsed, config)
+        elif parsed.command == "show":
+            return cmd_attachment_show(parsed, config)
         else:
             parser.print_help()
             return 1

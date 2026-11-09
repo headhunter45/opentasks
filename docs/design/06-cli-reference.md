@@ -497,20 +497,9 @@ Example:
 
 ```bash
 ot meeting list
+ot meeting list --status active
+ot meeting list --type grooming --json
 ```
-
-Possible future uses:
-
-- Active meeting tracking
-- Historical meeting listing
-
-Status:
-
-Design still evolving.
-
-See:
-
-- OQ-0011 Active Meeting Tracking
 
 ---
 
@@ -518,68 +507,59 @@ See:
 
 Status:
 
-Planned.
+Implemented (see `ADR-0033`).
 
-Attachment handling is expected to become a first-class capability.
+Attachments are stored in `<OwnerDir>/attachments/<filename>` and linked via relative Markdown links (`![label](attachments/<filename>)` for images or `[label](attachments/<filename>)` for other files).
 
 ---
 
 ## ot attachment add
 
-Proposed command.
+Copy a file into `<OwnerDir>/attachments/` and append a relative Markdown link to the WorkItem or Meeting document.
 
 Example:
 
 ```bash
-ot attachment add 4f2a9c screenshot.png
+ot attachment add 4f2a9c screenshot.png --label "Crash Screenshot"
 ```
 
 ---
 
 ## ot attachment remove
 
-Proposed command.
+Remove an attachment file from `<OwnerDir>/attachments/` and strip its relative Markdown link from the WorkItem or Meeting document.
 
 Example:
 
 ```bash
-ot attachment remove attachment-id
+ot attachment remove 4f2a9c screenshot.png
 ```
 
 ---
 
 ## ot attachment list
 
-Proposed command.
+List attachments for a WorkItem or Meeting.
 
 Example:
 
 ```bash
 ot attachment list 4f2a9c
+ot attachment list 4f2a9c --json
 ```
-
-Expected output:
-
-- WorkItem attachments
-- Comment attachments
-- Related attachment references
 
 ---
 
 ## ot attachment show
 
-Proposed command.
+Display metadata and path for a specific attachment.
 
 Example:
 
 ```bash
-ot attachment show attachment-id
+ot attachment show 4f2a9c screenshot.png
+ot attachment show 4f2a9c screenshot.png --json
 ```
-
-Expected behavior:
-
-- Display metadata
-- Resolve file path or URL
 
 ---
 
@@ -587,25 +567,26 @@ Expected behavior:
 
 Status:
 
-Partially planned.
+Implemented (`ot config get`, `ot config set`, `ot config list`).
 
 ---
 
 ## ot config get
 
-Proposed command.
+Query a configuration value (`--show-origin`, `--json`).
 
 Example:
 
 ```bash
 ot config get user.editor
+ot config get user.editor --show-origin
 ```
 
 ---
 
 ## ot config set
 
-Proposed command.
+Set a configuration value, automatically routing protected keys (`system.*`, `workItem.*`, `meeting.*`, `paths.*`) to `.ot/config.json` and user keys (`user.*`) to `.ot/config.local.json` unless overridden via `--project` or `--local`.
 
 Example:
 
@@ -613,14 +594,21 @@ Example:
 ot config set user.editor code
 ```
 
-Behavior:
-
-- Write to correct configuration layer
-- Warn on protected overrides
-
 Related:
 
 - ADR-0016 Protected Configuration Keys
+
+---
+
+## ot config list
+
+List effective configuration values (`--show-origin`, `--json`).
+
+Example:
+
+```bash
+ot config list --show-origin
+```
 
 ---
 

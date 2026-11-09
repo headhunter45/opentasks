@@ -324,6 +324,34 @@ class TestValidationAndRepair(unittest.TestCase):
         self.assertTrue(any("template conflict.md" in m for m in conflict_msgs))
         self.assertTrue(any("meeting conflict_mtg.md" in m for m in conflict_msgs))
 
+    def test_attachment_validation_broken_links_and_orphans(self):
+        task_dir = self.root / ".ot" / "tasks" / "FixLoginCrash"
+        att_dir = task_dir / "attachments"
+        att_dir.mkdir(parents=True, exist_ok=True)
+        # Orphaned file in attachments/ not referenced in index.md
+        (att_dir / "orphan.png").write_bytes(b"1234")
+        # Referenced file + broken attachment link in index.md
+        (att_dir / "linked.png").write_bytes(b"5678")
+        index_md = task_dir / "index.md"
+        content = index_md.read_text(encoding="utf-8")
+        index_md.write_text(
+            content + "\n![ok](attachments/linked.png)\n![missing](attachments/missing.png)\n",
+            encoding="utf-8",
+        )
+
+        v = Validator(self.root)
+        diags = v.validate_all()
+        broken_errs = [
+            d for d in diags if "Broken relative Markdown link 'attachments/missing.png'" in d.message
+        ]
+        self.assertEqual(len(broken_errs), 1)
+        self.assertEqual(broken_errs[0].severity, Severity.ERROR)
+
+        orphans = [d for d in diags if "Orphaned attachment" in d.message]
+        self.assertEqual(len(orphans), 1)
+        self.assertEqual(orphans[0].severity, Severity.WARNING)
+        self.assertIn("orphan.png", orphans[0].message)
+
 
 if __name__ == "__main__":
     unittest.main()

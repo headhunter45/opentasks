@@ -72,7 +72,7 @@ Negative:
 
 ## Amendments (As-Built)
 
-- **Relative Markdown Link Validation (`src/ot/validation.py`)**: `Validator._validate_markdown_links_in_text()` validates relative Markdown links in WorkItem bodies, comments, and Meeting notes (stripping fenced/inline code blocks and `#anchor` fragments, skipping external URI schemes without network calls, emitting `ERROR` if a relative link escapes `project_root`, and `WARNING` if the target file does not exist; task `46cc7b`).
-- **Implementation Tracking**: Implementing `ot attachment` CLI subcommands (`add`, `remove`, `list`, `show`) and orphaned attachment detection in `ot check` is tracked in task `ba1cd2`.
+- **Relative Markdown Link Validation (`src/ot/validation.py`)**: `Validator._validate_markdown_links_in_text()` validates relative Markdown links in WorkItem bodies, comments, and Meeting notes (stripping fenced/inline code blocks and `#anchor` fragments, skipping external URI schemes without network calls, emitting `ERROR` if a relative link escapes `project_root` or targets a missing `attachments/` file, and `WARNING` if another project-relative target file does not exist; tasks `46cc7b`, `ba1cd2`).
+- **Attachment CLI & Orphan Detection (`src/ot/cli.py`, `src/ot/validation.py`)**: Implemented `ot attachment add`, `remove`, `list`, and `show` for WorkItems and Meetings (formatting image links as `![label](attachments/<name>)` and non-image links as `[label](attachments/<name>)`), and added `Validator._validate_orphaned_attachments()` to report unreferenced files in `attachments/` directories as `WARNING` diagnostics without auto-deleting user files during `ot check --fix` (task `ba1cd2`).
 
 

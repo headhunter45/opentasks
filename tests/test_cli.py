@@ -517,6 +517,79 @@ class TestCLICommands(unittest.TestCase):
         self.assertEqual(len(ended), 2)
         self.assertTrue(all(m["ended_at"] is not None for m in ended))
 
+    def test_cli_attachment_commands(self):
+        # 1. Create a task and sample source files
+        main(["-C", str(self.root), "task", "create", "--title", "Attach Target", "--no-edit"])
+        img_file = self.root / "sample.png"
+        img_file.write_bytes(b"\x89PNG\r\n\x1a\n")
+        doc_file = self.root / "notes.txt"
+        doc_file.write_text("Attachment text payload", encoding="utf-8")
+
+        try:
+            # 2. Add image attachment with custom label
+            out_add1 = io.StringIO()
+            with redirect_stdout(out_add1):
+                ret_add1 = main([
+                    "-C",
+                    str(self.root),
+                    "attachment",
+                    "add",
+                    "AttachTarget",
+                    str(img_file),
+                    "--label",
+                    "Crash Screenshot",
+                ])
+            self.assertEqual(ret_add1, 0)
+            self.assertIn("Added attachment 'sample.png'", out_add1.getvalue())
+
+            # 3. Add non-image attachment
+            out_add2 = io.StringIO()
+            with redirect_stdout(out_add2):
+                ret_add2 = main([
+                    "-C",
+                    str(self.root),
+                    "attachment",
+                    "add",
+                    "AttachTarget",
+                    str(doc_file),
+                ])
+            self.assertEqual(ret_add2, 0)
+
+            task_md = (self.root / ".ot" / "tasks" / "AttachTarget" / "index.md").read_text(encoding="utf-8")
+            self.assertIn("![Crash Screenshot](attachments/sample.png)", task_md)
+            self.assertIn("[notes.txt](attachments/notes.txt)", task_md)
+
+            # 4. List attachments in JSON
+            out_list = io.StringIO()
+            with redirect_stdout(out_list):
+                ret_list = main(["-C", str(self.root), "attachment", "list", "AttachTarget", "--json"])
+            self.assertEqual(ret_list, 0)
+            listed = json.loads(out_list.getvalue())
+            self.assertEqual(len(listed), 2)
+            self.assertEqual([a["name"] for a in listed], ["notes.txt", "sample.png"])
+
+            # 5. Show attachment metadata
+            out_show = io.StringIO()
+            with redirect_stdout(out_show):
+                ret_show = main(["-C", str(self.root), "attachment", "show", "AttachTarget", "sample.png", "--json"])
+            self.assertEqual(ret_show, 0)
+            shown = json.loads(out_show.getvalue())
+            self.assertEqual(shown["name"], "sample.png")
+            self.assertTrue(shown["is_image"])
+
+            # 6. Remove attachment and verify file and link are removed
+            out_rm = io.StringIO()
+            with redirect_stdout(out_rm):
+                ret_rm = main(["-C", str(self.root), "attachment", "remove", "AttachTarget", "sample.png"])
+            self.assertEqual(ret_rm, 0)
+            self.assertFalse((self.root / ".ot" / "tasks" / "AttachTarget" / "attachments" / "sample.png").exists())
+            task_md_after = (self.root / ".ot" / "tasks" / "AttachTarget" / "index.md").read_text(encoding="utf-8")
+            self.assertNotIn("attachments/sample.png", task_md_after)
+            self.assertIn("[notes.txt](attachments/notes.txt)", task_md_after)
+        finally:
+            img_file.unlink(missing_ok=True)
+            doc_file.unlink(missing_ok=True)
+
 
 if __name__ == "__main__":
     unittest.main()

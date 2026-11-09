@@ -535,9 +535,10 @@ class Validator:
                     )
                 )
             elif not candidate.exists():
+                is_attachment_link = target.startswith("attachments/") or "/attachments/" in target
                 diagnostics.append(
                     Diagnostic(
-                        severity=Severity.WARNING,
+                        severity=Severity.ERROR if is_attachment_link else Severity.WARNING,
                         category=category,
                         message=f"Broken relative Markdown link '{target}' in {source_file.name} (target does not exist).",
                         file_path=source_file,
@@ -546,6 +547,38 @@ class Validator:
                     )
                 )
 
+        return diagnostics
+
+    def _validate_orphaned_attachments(
+        self,
+        source_file: Path,
+        text: str,
+        item_id: Optional[str] = None,
+        category: str = "work_item",
+    ) -> List[Diagnostic]:
+        """Warn on files in `<source_file.parent>/attachments/` that are not referenced in `text`."""
+        diagnostics: List[Diagnostic] = []
+        if not self.project_root:
+            return diagnostics
+        att_dir = source_file.parent / "attachments"
+        if not att_dir.is_dir():
+            return diagnostics
+
+        for att_file in sorted(att_dir.iterdir()):
+            if not att_file.is_file() or att_file.name.startswith("."):
+                continue
+            if f"attachments/{att_file.name}" not in text:
+                rel_att = att_file.relative_to(self.project_root)
+                diagnostics.append(
+                    Diagnostic(
+                        severity=Severity.WARNING,
+                        category=category,
+                        message=f"Orphaned attachment '{rel_att}' is not referenced in {source_file.name}.",
+                        file_path=att_file,
+                        item_id=item_id,
+                        is_fixable=False,
+                    )
+                )
         return diagnostics
 
     def validate_work_items(self) -> List[Diagnostic]:
@@ -780,12 +813,17 @@ class Validator:
                             if next_dep != curr_dep and next_dep in items_by_id:
                                 queue.append((next_dep, path_so_far + [next_dep]))
 
-            # Relative Markdown link validation in WorkItem body and comments
+            # Relative Markdown link and orphaned attachment validation in WorkItem
             if item.path and item.path.is_file():
                 combined_md = item.body + "\n" + "\n".join(c.body for c in item.comments)
                 diagnostics.extend(
                     self._validate_markdown_links_in_text(
                         combined_md, item.path, item_id=item.id, category="work_item"
+                    )
+                )
+                diagnostics.extend(
+                    self._validate_orphaned_attachments(
+                        item.path, combined_md, item_id=item.id, category="work_item"
                     )
                 )
 
@@ -811,6 +849,11 @@ class Validator:
                     diagnostics.extend(
                         self._validate_markdown_links_in_text(
                             mtg_text, mtg_file, category="meeting"
+                        )
+                    )
+                    diagnostics.extend(
+                        self._validate_orphaned_attachments(
+                            mtg_file, mtg_text, category="meeting"
                         )
                     )
                     if FRONTMATTER_Check := mtg_text.lstrip().startswith("---"):
