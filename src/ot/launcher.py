@@ -40,8 +40,48 @@ def get_configured_version(project_root: Path) -> Optional[str]:
 def launch_project_binary(binary_path: Path, args: List[str]) -> int:
     """Execute the project-installed binary with python3."""
     cmd = [sys.executable, str(binary_path), *args]
-    res = subprocess.run(cmd)
+    env = dict(os.environ)
+    env["OT_PROJECT_BINARY_ACTIVE"] = "1"
+    res = subprocess.run(cmd, env=env)
     return res.returncode
+
+
+def _is_running_binary(binary_path: Path) -> bool:
+    """Return True if the current process is already executing `binary_path`."""
+    try:
+        target = binary_path.resolve()
+    except OSError:
+        return False
+
+    argv0 = sys.argv[0] if sys.argv else ""
+    if argv0:
+        try:
+            if Path(argv0).resolve() == target:
+                return True
+        except OSError:
+            pass
+
+    ot_module = sys.modules.get("ot")
+    if ot_module is not None:
+        loader = getattr(ot_module, "__loader__", None)
+        archive = getattr(loader, "archive", None)
+        if archive:
+            try:
+                if Path(archive).resolve() == target:
+                    return True
+            except OSError:
+                pass
+    return False
+
+
+def _extract_project_dir(args: List[str]) -> Optional[str]:
+    """Extract -C / --project-dir from CLI args if present."""
+    for i, arg in enumerate(args):
+        if arg in ("-C", "--project-dir") and i + 1 < len(args):
+            return args[i + 1]
+        if arg.startswith("--project-dir="):
+            return arg.split("=", 1)[1]
+    return None
 
 
 def run_launcher(args: Optional[List[str]] = None, start_dir: Optional[Path | str] = None) -> int:
@@ -49,11 +89,18 @@ def run_launcher(args: Optional[List[str]] = None, start_dir: Optional[Path | st
     if args is None:
         args = sys.argv[1:]
 
+    # If already delegated into a project binary, execute CLI directly
+    if os.environ.get("OT_PROJECT_BINARY_ACTIVE") == "1":
+        from ot.cli import main as cli_main
+        return cli_main(args)
+
+    effective_start_dir = start_dir if start_dir is not None else _extract_project_dir(args)
+
     # Intercept top-level --version or version command
     if args and args[0] in ("--version", "-V", "version"):
         from ot import __version__
         print(f"Open Tasks Launcher v{__version__}")
-        proj_root = find_project_root(start_dir)
+        proj_root = find_project_root(effective_start_dir)
         if proj_root:
             cfg_v = get_configured_version(proj_root)
             bin_p = find_project_binary(proj_root)
@@ -62,7 +109,7 @@ def run_launcher(args: Optional[List[str]] = None, start_dir: Optional[Path | st
             print(f"Installed binary:   {bin_p or 'None (using fallback implementation)'}")
         return 0
 
-    proj_root = find_project_root(start_dir)
+    proj_root = find_project_root(effective_start_dir)
 
     # If initializing or no project exists yet, run directly via core cli
     if not proj_root or (args and args[0] == "init"):
@@ -71,7 +118,7 @@ def run_launcher(args: Optional[List[str]] = None, start_dir: Optional[Path | st
 
     # Check for project-installed implementation beneath .ot/bin/
     project_bin = find_project_binary(proj_root)
-    if project_bin:
+    if project_bin and not _is_running_binary(project_bin):
         return launch_project_binary(project_bin, args)
 
     # Fallback to local / environment package implementation
