@@ -86,3 +86,10 @@ Negative:
 - Requires validation
 - Requires parsing conventions
 - Some structured data may require frontmatter or metadata blocks
+
+## Amendments (As-Built)
+
+- **YAML Frontmatter Schema**: Work item metadata (`id`, `title`, `type`, `status`, `size`, `created_at`, `updated_at`, `parent`, `author`, `dependencies`, `tags`, plus arbitrary custom fields) is stored in a `---` delimited YAML frontmatter block at the top of each `index.md` file (`src/ot/parser.py`).
+- **Zero External Dependencies**: To keep `ot` self-contained inside a standard-library Python `.zipapp`, YAML frontmatter and Markdown sections are parsed and serialized using a lightweight built-in round-trip parser rather than third-party YAML or Markdown packages, preserving unknown user-authored headings and custom frontmatter keys.
+- **Comments Section Structure**: Work item comments are stored in a top-level `## Comments` section at the end of the Markdown document, with each comment formatted under `### Comment by <Name> <<Email>> on <ISO-8601-Timestamp>` followed by an HTML comment `<!-- comment-id: <UUID> -->` and the comment body.
+

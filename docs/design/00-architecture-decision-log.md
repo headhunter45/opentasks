@@ -50,7 +50,7 @@ ADRs describe why the system works that way.
 | ADR-0023 | First Class Validation and Repair | Accepted |
 | ADR-0024 | Markdown First Editing Workflow | Accepted |
 | ADR-0025 | Human Readable Over Machine Optimal | Accepted |
-| ADR-0026 | Work Item Filesystem Ownership | Proposed |
+| ADR-0026 | Work Item Filesystem Ownership | Accepted |
 | ADR-0027 | Direct File Editing Is Supported | Accepted |
 | ADR-0028 | Project Root Discovery | Accepted |
 | ADR-0029 | .ot Directory As Canonical Tool Root | Accepted |
@@ -62,8 +62,6 @@ ADRs describe why the system works that way.
 
 The following design documents provide detailed implementation and behavioral guidance that expands on the decisions recorded in this ADR index.
 
-Planned documents:
-
 | Document | Purpose |
 |------------|------------|
 | 01-vision-and-philosophy.md | Project goals, principles, and non-goals |
@@ -72,21 +70,25 @@ Planned documents:
 | 04-work-item-model.md | Work item structure and relationships |
 | 05-meetings-and-planning.md | Meeting workflows and planning artifacts |
 | 06-cli-reference.md | User-facing commands and workflows |
-| 07-identity-resolution.md | User identity and editor discovery |
+| 07-validation-and-repair.md | Integrity verification and repair behavior |
 | 08-upgrade-and-versioning.md | Version management and migrations |
-| 09-validation-and-repair.md | Integrity verification and repair behavior |
-| 10-open-questions.md | Unresolved design questions |
+| 09-open-questions.md | Unresolved design questions |
+| 10-roadmap.md | Phased implementation roadmap |
+| 11-design-notes-and-alternatives.md | Design discussions and evaluated alternatives |
+| 12-future-features.md | Potential post-initial capabilities |
+| 13-proof-of-concept-scope.md | Minimum scope for self-hosting |
+| 14-glossary.md | Standardized project terminology |
 
 ---
 
 # Modification Policy
 
-When a significant architectural decision is made:
+The purpose of the ADR system is to preserve both the original reasoning behind architectural decisions and how those decisions were realized in practice (similar to submitting architectural plans for a building and later recording "as-built" amendments):
 
-1. Create a new ADR.
-2. Do not rewrite history in existing ADRs.
-3. Mark superseded ADRs as Superseded rather than deleting them.
-4. Update this index accordingly.
+1. **Fundamental Reversals (New ADR)**: When a core architectural decision is replaced or reversed, create a new ADR, mark the replaced ADR as `Superseded`, and update this index. Do not rewrite the original decision text.
+2. **Implementation Refinements & Variances (`Amendments (As-Built)`)**: When the core decision remains intact but implementation details, naming, parameters, or scope evolve during build-out, preserve the original `Context`, `Decision`, `Reasoning`, and `Consequences` sections and append an `## Amendments (As-Built)` section at the end of the ADR documenting:
+   - Concrete parameters, naming changes, or structural refinements as implemented in code.
+   - Any portions of the decision that are partially implemented or deferred to follow-up work items.
+3. **Promoting `Proposed` ADRs**: When a `Proposed` ADR is validated and implemented, update its status to `Accepted` and record the concrete choices in an `## Amendments (As-Built)` section.
 
-The purpose of the ADR system is to preserve the reasoning behind design decisions and provide historical context for future contributors.
 `

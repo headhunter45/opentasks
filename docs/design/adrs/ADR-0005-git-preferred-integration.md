@@ -70,3 +70,9 @@ Negative:
 
 - Some integrations may behave differently across systems
 - Additional abstraction layers may be required in the future
+
+## Amendments (As-Built)
+
+- **Git and No-VCS Implemented First**: `src/ot/discovery.py` implements full Git configuration lookup (`git config user.name`, `user.email`, `core.editor`) and No-VCS environment/system fallbacks (`get_system_identity`, `get_system_editor`), as well as `.git/` and `.hg/` root detection (`find_vcs_root`).
+- **Mercurial Identity & Editor Queries Pending**: Querying Mercurial (`hg config ui.username`, `hg config ui.editor`) is not yet implemented in `src/ot/discovery.py` and is tracked in task `3109b3` (*Mercurial VCS Integration*).
+

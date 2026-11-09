@@ -59,3 +59,13 @@ Positive:
 Negative:
 
 - Additional filesystem traversal
+
+## Amendments (As-Built)
+
+- **Explicit Overrides Before Traversal (`src/ot/discovery.py`, `src/ot/launcher.py`, `src/ot/cli.py`)**:
+  - The CLI and global launcher support `-C <path>` / `--project-dir <path>` as the highest-priority starting directory override.
+  - `find_project_root` also checks the `OPEN_TASKS_ROOT` and `OT_ROOT` environment variables before upward directory traversal.
+- **Strict vs. Fallback Discovery**:
+  - Existing project commands use `find_project_root()`, which strictly requires an existing `.ot/` directory in the target or an ancestor directory.
+  - `discover_root()` implements the full 4-tier fallback chain (`.ot` -> `.git` -> `.hg` -> current working directory) for initialization and bootstrap workflows before `.ot/` has been created.
+

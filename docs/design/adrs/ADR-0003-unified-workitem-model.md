@@ -89,4 +89,10 @@ Negative:
 
 - Requires conventions to distinguish intent
 - Some reports may require additional filtering
+
+## Amendments (As-Built)
+
+- **Default Configured WorkItem Types**: In `src/ot/config.py` (`DEFAULT_CONFIG`) and `src/ot/templates.py` (`DEFAULT_TEMPLATES`), the default configured types installed on project initialization are `task`, `bug`, `feature`, `epic`, `spike`, and `chore` (`feature` is used in place of `enhancement`, and `release` is not pre-configured by default, though projects may add custom types in `.ot/config.json`).
+- **CLI Subcommand Naming**: For familiarity and brevity, the CLI groups WorkItem operations under `ot task <command>` (`list`, `show`, `create`, `edit`, `update`, `status`, `comment`, `add-dependency`, `remove-dependency`, `get-dependencies`) while operating uniformly across all WorkItem types.
+
 ``

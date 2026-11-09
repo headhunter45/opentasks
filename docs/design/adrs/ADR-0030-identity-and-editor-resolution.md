@@ -76,3 +76,12 @@ Positive:
 Negative:
 
 - Some configuration lookups require subprocess execution
+
+## Amendments (As-Built)
+
+- **Environment Variable Names & System Fallbacks (`src/ot/discovery.py`, `src/ot/config.py`)**:
+  - **User Name**: After `.ot/config.local.json`, `.ot/config.json`, `~/.ot/config.json`, and `git config user.name`, resolution checks `OT_USER`, `USER`, `USERNAME`, `LOGNAME`, `getpass.getuser()`, and finally `"Anonymous"`.
+  - **User Email**: After config layers and `git config user.email`, resolution checks the `EMAIL` environment variable (defaulting to `None` if unset).
+  - **Editor**: After config layers and `git config core.editor`, resolution checks `EDITOR`, `VISUAL`, and platform defaults (`notepad.exe` on Windows `win32`, `nano` on POSIX).
+- **Mercurial Config Queries Pending**: Only Git (`git config`) is currently queried in step 4; Mercurial (`hg config ui.username` / `ui.editor`) is tracked in task `3109b3` (*Mercurial VCS Integration*).
+

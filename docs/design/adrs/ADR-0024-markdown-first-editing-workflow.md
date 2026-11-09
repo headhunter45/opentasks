@@ -58,3 +58,11 @@ Negative:
 
 - Parsing complexity
 - Validation requirements
+
+## Amendments (As-Built)
+
+- **Interactive and Non-Interactive CLI Editing (`src/ot/cli.py`)**:
+  - `ot task edit <id>` writes a rendered copy of the WorkItem to a temporary `.md` file, opens the user's configured editor, parses the edited Markdown and YAML frontmatter on save, updates `updated_at`, and atomically writes the canonical file.
+  - `ot task create` supports both interactive editing (`--edit` or when no title is provided) and non-interactive flag-driven creation (`ot task create "Title" --no-edit`).
+  - `ot task update <id>` was added (task `efd404`) to allow non-interactive updates to frontmatter fields (`--title`, `--type`, `--status`, `--size`, `--parent`, `--tag`) and the `## Overview` section (`--overview`) from scripts and AI agents while preserving the rest of the Markdown body and comments.
+

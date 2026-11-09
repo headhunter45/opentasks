@@ -64,3 +64,8 @@ Positive:
 Negative:
 
 - External tools must be developed separately
+
+## Amendments (As-Built)
+
+- **Built-in JSON CLI Output**: In addition to storing open Markdown/YAML files on disk, `ot task list --json` and `ot check --json` emit structured JSON directly from the CLI (`src/ot/cli.py`) so external reporting scripts, dashboards, and CI pipelines can consume Open Tasks data without writing custom Markdown parsers. Formal JSON Schema definitions and export tooling are tracked under Epic `474111` (*Export and Reporting Tooling*) and Task `d2c34f` (*JSON Schema Export*).
+

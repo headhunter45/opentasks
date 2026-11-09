@@ -81,3 +81,14 @@ Negative:
 
 - Multiple configuration files
 - Additional migration considerations
+
+## Amendments (As-Built)
+
+- **Implemented Configuration Structure (`src/ot/config.py`)**:
+  - `system`: `configSchemaVersion` (currently `1`) and `toolVersion` (configured semantic version of Open Tasks).
+  - `project`: `name` and `description`.
+  - `user`: `name`, `email`, `editor`, and optional `outputWidth` (also accepted via `output.width`).
+  - `workItem`: `types`, `statuses`, and `sizes` dictionaries mapping keys to `{"label": ..., "description": ...}`.
+  - `meeting`: `types` dictionary (`grooming`, `planning`, `retrospective`, `ideation`).
+- **User Home Override**: Global user storage defaults to `~/.ot/` and can be redirected via the `OT_USER_HOME` environment variable (falling back to `/tmp/ot-user-<uid>` if `~/.ot` is not writable in sandboxed/CI environments, `src/ot/cache.py`).
+

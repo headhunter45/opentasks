@@ -78,3 +78,12 @@ Negative:
 
 - Some operations may be unnecessarily blocked
 - Additional repository inspection required
+
+## Amendments (As-Built)
+
+- **Current Implementation**:
+  - `src/ot/parser.py` (`write_work_item`) writes work item changes atomically via a temporary file in the target directory followed by `os.replace`.
+  - `src/ot/validation.py` (`Validator.validate_work_items`) detects unresolved Git/VCS merge conflict markers (`<<<<<<<` and `>>>>>>>`) in work item files during `ot check`.
+- **Deferred / Partial Scope**:
+  - Pre-write repository state inspection (blocking mutating CLI commands when `.git/MERGE_HEAD`, `rebase-merge`, `rebase-apply`, `CHERRY_PICK_HEAD`, or lock files are present, and extending merge conflict marker checks to configuration, meeting, and template files) is not yet enforced before write operations and is tracked in task `143b5e`.
+

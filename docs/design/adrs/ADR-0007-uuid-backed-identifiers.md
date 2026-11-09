@@ -76,3 +76,9 @@ Negative:
 
 - Less human friendly
 - Requires secondary display identifiers
+
+## Amendments (As-Built)
+
+- **UUIDv4 Format**: `src/ot/identifiers.py` and `src/ot/models.py` generate lowercase standard hyphenated UUIDv4 strings (`uuid.uuid4()`) validated against `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$` (case-insensitive).
+- **Canonical Storage**: Both `id` (the work item's own identifier) and relationship fields (`parent` and `dependencies` in YAML frontmatter, as well as `<!-- comment-id: <uuid> -->` in comments) store full canonical UUIDs on disk.
+

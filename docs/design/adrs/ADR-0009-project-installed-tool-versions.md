@@ -68,3 +68,11 @@ Negative:
 
 - Multiple copies of OT may exist
 - Upgrade logic required
+
+## Amendments (As-Built)
+
+- **Versioned Subdirectory Layout**: Project-installed binaries are stored in versioned subdirectories under `.ot/bin/<version>/ot.zipapp` alongside `.ot/bin/<version>/ot-manifest.json` (`src/ot/upgrade.py`, `src/ot/installation.py`, `src/ot/launcher.py`), allowing multiple versions to coexist during upgrades or branch switches while retaining backward-compatible fallback lookup for legacy flat `.ot/bin/ot.zipapp` layouts.
+- **Configured Version Key**: The project's expected tool version is recorded at `system.toolVersion` in `.ot/config.json`.
+- **Automatic Download & User Version Cache**: When the launcher (`run_launcher` / `ensure_project_binary` in `src/ot/launcher.py`) or project wrapper (`oat`) runs in a project whose configured `system.toolVersion` is not yet installed under `.ot/bin/<version>/`, it checks the shared user cache (`~/.ot/versions/<version>/ot.zipapp`, or `$OT_USER_HOME/versions/<version>/ot.zipapp`), downloads the release `.zipapp` and verifies its SHA-256 against `SHA256SUMS` from GitHub Releases if not cached (`src/ot/cache.py`), and populates `.ot/bin/<version>/`.
+- **Git Ignore Management**: `ot init` automatically ensures `.ot/bin/` is added to the project's `.gitignore` (`_ensure_gitignore_entry` in `src/ot/installation.py`) so binary artifacts are not committed to source control.
+

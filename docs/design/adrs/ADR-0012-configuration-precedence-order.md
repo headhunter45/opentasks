@@ -65,3 +65,11 @@ Negative:
 
 - Requires documentation
 - Requires configuration inspection tooling
+
+## Amendments (As-Built)
+
+- **CLI Flag Overrides**: For settings exposed as CLI options (such as `--width` for output column width or `-C` / `--project-dir` for project root discovery), explicit command-line arguments take precedence above `.ot/config.local.json`.
+- **Deep Merging & Per-Field Fallbacks (`src/ot/config.py`)**:
+  - JSON configuration files (`DEFAULT_CONFIG` <- `~/.ot/config.json` <- `.ot/config.json` <- `.ot/config.local.json`) are combined via recursive dictionary merge (`deep_merge`).
+  - VCS and environment fallbacks are then applied individually for unset `user.name`, `user.email`, and `user.editor` fields.
+
