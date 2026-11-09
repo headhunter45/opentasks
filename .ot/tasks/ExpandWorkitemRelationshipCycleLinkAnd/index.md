@@ -2,10 +2,10 @@
 id: 46cc7b00-a0a6-49b9-b997-4a17d0a254f5
 title: Expand WorkItem, relationship cycle, link, and filesystem validation in ot check
 type: feature
-status: planned
+status: completed
 size: medium
 created_at: 2026-11-09T18:36:42.469806+00:00
-updated_at: 2026-11-09T19:32:00.000000+00:00
+updated_at: 2026-11-09T21:01:16.759543+00:00
 author:
   name: Tom Hicks
   email: headhunter3@gmail.com
@@ -22,3 +22,9 @@ Extend `ot check` and `ot check --fix` to detect parent and dependency cycles, v
 - [ ] Validate relative Markdown links (`[label](relative/path)` and `![alt](relative/path)`) in WorkItem and Meeting Markdown bodies/comments: verify the target file exists within `project_root` (ignoring `#anchor` fragments and skipping `http://`, `https://`, `mailto:` URLs without network calls).
 - [ ] Add unit tests for parent cycles, dependency cycles, relative link validation, and `SomeTask.md` -> `SomeTask/index.md` repair.
 
+## Comments
+
+### Comment by Tom Hicks <headhunter3@gmail.com> on 2026-11-09T21:01:16.123121+00:00
+<!-- comment-id: 4f894a10-ccf3-4726-ab97-79ad52f9b467 -->
+
+Added parent and dependency cycle detection, relative Markdown link validation, and standalone task file conflict detection and repair in ot check.

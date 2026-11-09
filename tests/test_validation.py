@@ -203,6 +203,55 @@ class TestValidationAndRepair(unittest.TestCase):
             )
         )
 
+    def test_cycles_relative_links_and_standalone_file_repair(self):
+        # 1. Standalone task file SomeTask.md -> SomeTask/index.md repair
+        standalone = self.root / ".ot" / "tasks" / "StandaloneItem.md"
+        standalone.write_text(
+            "---\n"
+            "id: 99999999-9999-4999-8999-999999999999\n"
+            "title: Standalone Item\n"
+            "type: task\n"
+            "status: planned\n"
+            "created_at: 2026-01-01T00:00:00Z\n"
+            "updated_at: 2026-01-01T00:00:00Z\n"
+            "---\n\n# Standalone Item\n",
+            encoding="utf-8",
+        )
+        validator = Validator(self.root)
+        diags = validator.validate_work_items()
+        self.assertTrue(any("Standalone task file" in d.message and d.is_fixable for d in diags))
+
+        repairer = Repairer(self.root)
+        repairs = repairer.repair()
+        self.assertTrue(any("Moved standalone task file" in r for r in repairs))
+        self.assertFalse(standalone.exists())
+        self.assertTrue((self.root / ".ot" / "tasks" / "StandaloneItem" / "index.md").is_file())
+
+        # 2. Parent cycle and dependency cycle between two tasks
+        from ot.parser import read_work_item, write_work_item
+
+        t1 = self.root / ".ot" / "tasks" / "FixLoginCrash" / "index.md"
+        t2 = self.root / ".ot" / "tasks" / "SetupCI" / "index.md"
+        item1 = read_work_item(t1)
+        item2 = read_work_item(t2)
+
+        item1.meta.parent = item2.id
+        item1.meta.dependencies = [item2.id]
+        item1.body += "\nSee [missing doc](missing-spec.md) and [ext](https://example.com/spec).\n"
+        write_work_item(item1)
+
+        item2.meta.parent = item1.id
+        item2.meta.dependencies = [item1.id]
+        write_work_item(item2)
+
+        validator2 = Validator(self.root)
+        diags2 = validator2.validate_work_items()
+        msgs2 = [d.message for d in diags2]
+        self.assertTrue(any("Circular parent relationship detected" in m for m in msgs2))
+        self.assertTrue(any("Circular dependency relationship detected" in m for m in msgs2))
+        self.assertTrue(any("Broken relative Markdown link 'missing-spec.md'" in m for m in msgs2))
+        self.assertFalse(any("https://example.com/spec" in m for m in msgs2))
+
 
 if __name__ == "__main__":
     unittest.main()

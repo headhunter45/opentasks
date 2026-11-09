@@ -72,5 +72,7 @@ Negative:
 
 ## Amendments (As-Built)
 
-- **Implementation Tracking**: Implementing `ot attachment` CLI subcommands (`add`, `remove`, `list`, `show`) and attachment/link validation in `ot check` is tracked in tasks `ba1cd2` and `46cc7b`.
+- **Relative Markdown Link Validation (`src/ot/validation.py`)**: `Validator._validate_markdown_links_in_text()` validates relative Markdown links in WorkItem bodies, comments, and Meeting notes (stripping fenced/inline code blocks and `#anchor` fragments, skipping external URI schemes without network calls, emitting `ERROR` if a relative link escapes `project_root`, and `WARNING` if the target file does not exist; task `46cc7b`).
+- **Implementation Tracking**: Implementing `ot attachment` CLI subcommands (`add`, `remove`, `list`, `show`) and orphaned attachment detection in `ot check` is tracked in task `ba1cd2`.
+
 

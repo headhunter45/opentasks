@@ -442,6 +442,60 @@ class Validator:
 
         return diagnostics
 
+    def _validate_markdown_links_in_text(
+        self,
+        text: str,
+        source_file: Path,
+        item_id: Optional[str] = None,
+        category: str = "work_item",
+    ) -> List[Diagnostic]:
+        """Validate relative Markdown links in `text` resolved from `source_file.parent`."""
+        diagnostics: List[Diagnostic] = []
+        if not self.project_root or not text:
+            return diagnostics
+
+        # Strip fenced code blocks and inline code spans so code examples are not treated as links
+        cleaned = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+        cleaned = re.sub(r"`[^`\n]+`", "", cleaned)
+
+        for match in re.finditer(r"!?\[[^\]]*\]\(([^)]+)\)", cleaned):
+            raw_target = match.group(1).strip()
+            if not raw_target:
+                continue
+            target = raw_target.split()[0].strip("<>")
+            target = target.split("#", 1)[0].strip()
+            if not target:
+                continue
+            # Skip external URLs or URI schemes (http://, https://, mailto:, etc.) without network calls
+            if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", target):
+                continue
+
+            candidate = source_file.parent / target
+            if self.config and not self.config.is_within_project_root(candidate):
+                diagnostics.append(
+                    Diagnostic(
+                        severity=Severity.ERROR,
+                        category=category,
+                        message=f"Relative Markdown link '{target}' in {source_file.name} resolves outside the project root.",
+                        file_path=source_file,
+                        item_id=item_id,
+                        is_fixable=False,
+                    )
+                )
+            elif not candidate.exists():
+                diagnostics.append(
+                    Diagnostic(
+                        severity=Severity.WARNING,
+                        category=category,
+                        message=f"Broken relative Markdown link '{target}' in {source_file.name} (target does not exist).",
+                        file_path=source_file,
+                        item_id=item_id,
+                        is_fixable=False,
+                    )
+                )
+
+        return diagnostics
+
     def validate_work_items(self) -> List[Diagnostic]:
         diagnostics: List[Diagnostic] = []
         if not self.project_root:
@@ -450,6 +504,36 @@ class Validator:
         tasks_dir = self.config.tasks_dir if self.config else (self.project_root / ".ot" / "tasks")
         if not tasks_dir.is_dir():
             return diagnostics
+
+        # Check for standalone .md files (e.g. SomeTask.md instead of SomeTask/index.md)
+        for md_path in sorted(tasks_dir.rglob("*.md")):
+            if md_path.name == "index.md" or "attachments" in md_path.parts:
+                continue
+            target_dir = md_path.parent / md_path.stem
+            target_index = target_dir / "index.md"
+            rel_md = md_path.relative_to(self.project_root)
+            rel_idx = target_index.relative_to(self.project_root)
+            if target_index.exists():
+                diagnostics.append(
+                    Diagnostic(
+                        severity=Severity.ERROR,
+                        category="filesystem",
+                        message=f"Standalone task file '{rel_md}' conflicts with existing '{rel_idx}'.",
+                        file_path=md_path,
+                        is_fixable=False,
+                    )
+                )
+            else:
+                diagnostics.append(
+                    Diagnostic(
+                        severity=Severity.WARNING,
+                        category="filesystem",
+                        message=f"Standalone task file '{rel_md}' should be stored at '{rel_idx}'.",
+                        file_path=md_path,
+                        is_fixable=True,
+                        repair_action=f"Move {rel_md} to {rel_idx}",
+                    )
+                )
 
         scanner = RepositoryScanner(self.project_root)
         items = scanner.scan_tasks_directory()
@@ -560,7 +644,9 @@ class Validator:
                     )
                 )
 
-        # Cross-reference check (broken parent or dependency UUIDs)
+        # Cross-reference check (broken parent or dependency UUIDs, cycles, and relative links)
+        items_by_id: Dict[str, WorkItem] = {it.id: it for it in items if it.id}
+
         for item in items:
             item_file = item.path or Path("unknown")
             if item.parent_id and item.parent_id not in seen_uuids:
@@ -588,6 +674,85 @@ class Validator:
                         )
                     )
 
+            # Parent cycle detection (A -> B -> A)
+            if item.id and item.parent_id and item.parent_id in items_by_id:
+                visited_parents: List[str] = [item.id]
+                curr_p: Optional[str] = item.parent_id
+                while curr_p and curr_p in items_by_id:
+                    if curr_p in visited_parents:
+                        if curr_p == item.id:
+                            chain = " -> ".join(visited_parents + [curr_p])
+                            diagnostics.append(
+                                Diagnostic(
+                                    severity=Severity.ERROR,
+                                    category="work_item",
+                                    message=f"Circular parent relationship detected: {chain}",
+                                    file_path=item_file,
+                                    item_id=item.id,
+                                    is_fixable=False,
+                                )
+                            )
+                        break
+                    visited_parents.append(curr_p)
+                    curr_p = items_by_id[curr_p].parent_id
+
+            # Dependency cycle detection (A depends on B depends on A, excluding self-dependency)
+            if item.id:
+                queue: List[Tuple[str, List[str]]] = [
+                    (dep_id, [item.id, dep_id])
+                    for dep_id in item.dependencies
+                    if dep_id != item.id and dep_id in items_by_id
+                ]
+                seen_dep_nodes: Set[str] = set()
+                while queue:
+                    curr_dep, path_so_far = queue.pop(0)
+                    if curr_dep == item.id:
+                        chain = " -> ".join(path_so_far)
+                        diagnostics.append(
+                            Diagnostic(
+                                severity=Severity.ERROR,
+                                category="work_item",
+                                message=f"Circular dependency relationship detected: {chain}",
+                                file_path=item_file,
+                                item_id=item.id,
+                                is_fixable=False,
+                            )
+                        )
+                        break
+                    if curr_dep in seen_dep_nodes:
+                        continue
+                    seen_dep_nodes.add(curr_dep)
+                    dep_obj = items_by_id.get(curr_dep)
+                    if dep_obj:
+                        for next_dep in dep_obj.dependencies:
+                            if next_dep != curr_dep and next_dep in items_by_id:
+                                queue.append((next_dep, path_so_far + [next_dep]))
+
+            # Relative Markdown link validation in WorkItem body and comments
+            if item.path and item.path.is_file():
+                combined_md = item.body + "\n" + "\n".join(c.body for c in item.comments)
+                diagnostics.extend(
+                    self._validate_markdown_links_in_text(
+                        combined_md, item.path, item_id=item.id, category="work_item"
+                    )
+                )
+
+        # Also validate relative Markdown links in meetings if present
+        meetings_dir = self.config.meetings_dir if self.config else (self.project_root / ".ot" / "meetings")
+        if meetings_dir.is_dir():
+            for mtg_file in sorted(meetings_dir.rglob("*.md")):
+                if "attachments" in mtg_file.parts:
+                    continue
+                try:
+                    mtg_text = mtg_file.read_text(encoding="utf-8")
+                    diagnostics.extend(
+                        self._validate_markdown_links_in_text(
+                            mtg_text, mtg_file, category="meeting"
+                        )
+                    )
+                except Exception:
+                    pass
+
         return diagnostics
 
 
@@ -613,10 +778,20 @@ class Repairer:
             if not diag.is_fixable:
                 continue
 
-            # 1. Missing directory repair
+            # 1. Missing directory or standalone task file repair
             if diag.category == "filesystem" and diag.file_path:
-                diag.file_path.mkdir(parents=True, exist_ok=True)
-                repairs_made.append(f"Created missing directory: {diag.file_path.relative_to(self.project_root)}")
+                if diag.file_path.suffix == ".md" and diag.file_path.is_file():
+                    target_dir = diag.file_path.parent / diag.file_path.stem
+                    target_index = target_dir / "index.md"
+                    if not target_index.exists():
+                        target_dir.mkdir(parents=True, exist_ok=True)
+                        diag.file_path.rename(target_index)
+                        repairs_made.append(
+                            f"Moved standalone task file: {diag.file_path.relative_to(self.project_root)} -> {target_index.relative_to(self.project_root)}"
+                        )
+                else:
+                    diag.file_path.mkdir(parents=True, exist_ok=True)
+                    repairs_made.append(f"Created missing directory: {diag.file_path.relative_to(self.project_root)}")
 
             # 2. Protected config key relocation
             elif diag.category == "config" and diag.file_path and diag.file_path.name == "config.local.json":

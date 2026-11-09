@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import os
 from pathlib import Path
 import subprocess
@@ -73,6 +74,7 @@ def discover_root(start_dir: Optional[Path | str] = None, allow_fallback: bool =
     raise FileNotFoundError("Could not locate Open Tasks project root (.ot).")
 
 
+@functools.lru_cache(maxsize=4)
 def is_git_available() -> bool:
     """Check if git binary is available on PATH."""
     try:
@@ -82,6 +84,7 @@ def is_git_available() -> bool:
         return False
 
 
+@functools.lru_cache(maxsize=64)
 def get_git_config(key: str, repo_dir: Optional[Path | str] = None) -> Optional[str]:
     """Query git config for a specific key."""
     if not is_git_available():
