@@ -2,10 +2,10 @@
 id: e04754c2-bd31-4556-aacd-9914d86b5808
 title: Implement schema and template migration runner during ot upgrade
 type: feature
-status: planned
+status: completed
 size: medium
 created_at: 2026-11-09T18:37:04.573966+00:00
-updated_at: 2026-11-09T19:32:00.000000+00:00
+updated_at: 2026-11-09T21:04:14.712686+00:00
 author:
   name: Tom Hicks
   email: headhunter3@gmail.com
@@ -25,3 +25,9 @@ Support checksum-aware non-destructive template upgrades (auto-update untouched 
 - [ ] Add a sequential configuration schema migration runner (`run_config_migrations(config_data, target_schema_version)`) in `src/ot/upgrade.py` that applies registered `v -> v+1` migration functions in staging during `perform_transactional_upgrade` for both `config.json` and `config.local.json`.
 - [ ] Add unit tests for untouched template auto-updates, user-modified template preservation (`.default` creation), and sequential config schema migrations in transactional upgrades.
 
+## Comments
+
+### Comment by Tom Hicks <headhunter3@gmail.com> on 2026-11-09T21:04:12.515147+00:00
+<!-- comment-id: fd235d70-4100-4de6-8cec-0ed4bda9688c -->
+
+Implemented checksum-aware non-destructive template upgrades (upgrade_project_templates) and sequential config schema migrations (run_config_migrations) during ot upgrade.

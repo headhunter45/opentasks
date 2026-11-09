@@ -130,6 +130,58 @@ class TestUpgradeSystem(unittest.TestCase):
         self.assertEqual(ret, 0)
         self.assertIn("Successfully upgraded", buf.getvalue())
 
+    def test_template_and_schema_migrations_during_upgrade(self):
+        import hashlib
+        from ot.templates import (
+            DEFAULT_TEMPLATES,
+            register_historical_template_hash,
+            upgrade_project_templates,
+        )
+        from ot.upgrade import CONFIG_MIGRATIONS, run_config_migrations
+
+        proj_dir = self.root / "tpl_mig_proj"
+        init_project(proj_dir, version="0.1.0")
+
+        # 1. Simulate a historical untouched template (tasks/bug.md) and a user-modified template (tasks/feature.md)
+        bug_tpl = proj_dir / ".ot" / "templates" / "tasks" / "bug.md"
+        old_builtin_content = "# Historical Built-in Bug Template\n"
+        old_hash = hashlib.sha256(old_builtin_content.encode("utf-8")).hexdigest()
+        bug_tpl.write_text(old_builtin_content, encoding="utf-8")
+        register_historical_template_hash("tasks/bug.md", old_hash)
+
+        feat_tpl = proj_dir / ".ot" / "templates" / "tasks" / "feature.md"
+        custom_feat_content = "# User Customized Feature Template\n"
+        feat_tpl.write_text(custom_feat_content, encoding="utf-8")
+
+        # Also remove tasks/chore.md to verify missing template installation
+        chore_tpl = proj_dir / ".ot" / "templates" / "tasks" / "chore.md"
+        chore_tpl.unlink()
+
+        res = perform_transactional_upgrade(proj_dir, "0.2.0")
+        self.assertEqual(res["status"], "upgraded")
+        tpl_changes = res["template_changes"]
+        self.assertIn("tasks/chore.md", tpl_changes["installed"])
+        self.assertIn("tasks/bug.md", tpl_changes["updated"])
+        self.assertIn("tasks/feature.md", tpl_changes["preserved_with_default"])
+
+        # Verify bug.md was updated to current default, feature.md was preserved, and feature.md.default was written
+        self.assertEqual(bug_tpl.read_text(encoding="utf-8").strip(), DEFAULT_TEMPLATES["tasks/bug.md"].strip())
+        self.assertEqual(feat_tpl.read_text(encoding="utf-8"), custom_feat_content)
+        self.assertTrue((proj_dir / ".ot" / "templates" / "tasks" / "feature.md.default").is_file())
+
+        # 2. Sequential config schema migration runner (0 -> 1)
+        CONFIG_MIGRATIONS[0] = lambda d: {**d, "migratedFromZero": True}
+        try:
+            migrated, steps = run_config_migrations(
+                {"system": {"configSchemaVersion": 0}},
+                target_schema_version=1,
+            )
+            self.assertEqual(steps, ["0->1"])
+            self.assertEqual(migrated["system"]["configSchemaVersion"], 1)
+            self.assertTrue(migrated["migratedFromZero"])
+        finally:
+            CONFIG_MIGRATIONS.pop(0, None)
+
 
 if __name__ == "__main__":
     unittest.main()

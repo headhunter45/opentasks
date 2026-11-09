@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 from pathlib import Path
 import shutil
 import tempfile
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ot.cache import (
     ChecksumMismatchError,
@@ -19,11 +20,11 @@ from ot.cache import (
     parse_sha256sums,
     verify_artifact_checksum,
 )
-from ot.config import load_json_file
+from ot.config import load_config, load_json_file
 from ot.discovery import find_project_root
 from ot.installation import WRAPPER_SCRIPT_BAT, WRAPPER_SCRIPT_SH
 from ot.packaging import build_zipapp_artifact, compute_sha256
-from ot.templates import install_default_templates
+from ot.templates import install_default_templates, upgrade_project_templates
 from ot.validation import Validator
 from ot.version import (
     compare_versions,
@@ -35,6 +36,48 @@ from ot.version import (
 class UpgradeError(RuntimeError):
     """Raised when an upgrade operation fails."""
     pass
+
+
+CURRENT_CONFIG_SCHEMA_VERSION = 1
+
+# Registry mapping schema version `v` -> callable migrating config dict from `v` to `v + 1`.
+CONFIG_MIGRATIONS: Dict[int, Callable[[Dict[str, Any]], Dict[str, Any]]] = {}
+
+
+def run_config_migrations(
+    config_data: Dict[str, Any],
+    target_schema_version: int = CURRENT_CONFIG_SCHEMA_VERSION,
+    update_version_key: bool = True,
+) -> Tuple[Dict[str, Any], List[str]]:
+    """Run sequential single-integer configuration schema migrations up to `target_schema_version`."""
+    data = copy.deepcopy(config_data)
+    sys_section = data.get("system", {})
+    raw_ver = sys_section.get("configSchemaVersion") if isinstance(sys_section, dict) else None
+    current_ver = int(raw_ver) if raw_ver is not None else target_schema_version
+
+    if current_ver > target_schema_version:
+        raise UpgradeError(
+            f"Configuration schema version {current_ver} is newer than supported target {target_schema_version}."
+        )
+
+    steps_applied: List[str] = []
+    while current_ver < target_schema_version:
+        migrator = CONFIG_MIGRATIONS.get(current_ver)
+        if migrator is None:
+            raise UpgradeError(
+                f"No configuration migration registered for schema version {current_ver} -> {current_ver + 1}."
+            )
+        data = migrator(data)
+        next_ver = current_ver + 1
+        if update_version_key or ("system" in data and "configSchemaVersion" in data.get("system", {})):
+            data.setdefault("system", {})["configSchemaVersion"] = next_ver
+        steps_applied.append(f"{current_ver}->{next_ver}")
+        current_ver = next_ver
+
+    if update_version_key:
+        data.setdefault("system", {})["configSchemaVersion"] = target_schema_version
+
+    return data, steps_applied
 
 
 def install_artifact_to_project_bin(
@@ -162,7 +205,7 @@ def perform_transactional_upgrade(
     # 2. Transactional Staging
     ot_dir = root / ".ot"
     config_file = ot_dir / "config.json"
-    bin_dir = ot_dir / "bin"
+    local_config_file = ot_dir / "config.local.json"
 
     with tempfile.TemporaryDirectory() as staging_dir:
         staging = Path(staging_dir)
@@ -170,18 +213,36 @@ def perform_transactional_upgrade(
         # Copy current .ot to staging
         shutil.copytree(ot_dir, staged_ot)
 
-        # 3. Update version in staged config.json
+        # 3. Run sequential schema migrations and update version in staged config.json & config.local.json
+        migration_steps: List[str] = []
         staged_config_path = staged_ot / "config.json"
         if staged_config_path.is_file():
             cfg_data = load_json_file(staged_config_path)
+            cfg_data, steps = run_config_migrations(cfg_data, update_version_key=True)
+            migration_steps.extend(steps)
             cfg_data.setdefault("system", {})["toolVersion"] = target_version
             staged_config_path.write_text(json.dumps(cfg_data, indent=2), encoding="utf-8")
+
+        staged_local_path = staged_ot / "config.local.json"
+        if staged_local_path.is_file():
+            local_data = load_json_file(staged_local_path)
+            local_data, local_steps = run_config_migrations(local_data, update_version_key=False)
+            migration_steps.extend(local_steps)
+            staged_local_path.write_text(json.dumps(local_data, indent=2), encoding="utf-8")
+
+        # Ensure any custom configured paths outside .ot exist in staging before template upgrade & validation
+        try:
+            staged_cfg = load_config(staging)
+            for d in (staged_cfg.tasks_dir, staged_cfg.meetings_dir, staged_cfg.templates_dir):
+                d.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
 
         # 4. Install new binary in staged .ot/bin/<target_version>/
         install_artifact_to_project_bin(staging, target_version, artifact_path)
 
-        # 5. Install any new default templates into staged templates
-        install_default_templates(staging, overwrite=False)
+        # 5. Non-destructively upgrade templates in staging
+        upgrade_project_templates(staging)
 
         # 6. Validate staged project state
         validator = Validator(staging)
@@ -193,14 +254,16 @@ def perform_transactional_upgrade(
             raise UpgradeError(f"Upgrade validation failed: {err_msgs}")
 
         # 7. Atomically commit staged changes into real .ot/
-        # Update config.json
-        shutil.copy2(staged_config_path, config_file)
+        if staged_config_path.is_file():
+            shutil.copy2(staged_config_path, config_file)
+        if staged_local_path.is_file():
+            shutil.copy2(staged_local_path, local_config_file)
 
         # Update .ot/bin/<target_version>/ while preserving older versions
         install_artifact_to_project_bin(root, target_version, artifact_path)
 
-        # Update templates
-        install_default_templates(root, overwrite=False)
+        # Upgrade project templates in real project root
+        template_changes = upgrade_project_templates(root)
 
         # Update project wrapper scripts (oat / oat.bat) and remove legacy otw / otw.bat
         oat_sh = root / "oat"
@@ -213,9 +276,16 @@ def perform_transactional_upgrade(
             if legacy_path.is_file():
                 legacy_path.unlink()
 
+    msg = f"Successfully upgraded Open Tasks from {current_version} to {target_version}."
+    if template_changes["preserved_with_default"]:
+        preserved_list = ", ".join(template_changes["preserved_with_default"])
+        msg += f" Preserved customized template(s) ({preserved_list}); new defaults written to .default files."
+
     return {
         "status": "upgraded",
         "previous_version": current_version,
         "new_version": target_version,
-        "message": f"Successfully upgraded Open Tasks from {current_version} to {target_version}.",
+        "schema_migrations": migration_steps,
+        "template_changes": template_changes,
+        "message": msg,
     }

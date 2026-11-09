@@ -67,5 +67,8 @@ Negative:
 
 ## Amendments (As-Built)
 
-- **Implementation Tracking**: Implementing checksum-aware template upgrades and the sequential schema migration runner in `src/ot/upgrade.py` is tracked in task `e04754`.
+- **Implemented Template & Schema Migrations (`src/ot/templates.py`, `src/ot/upgrade.py`)**:
+  - `KNOWN_DEFAULT_TEMPLATE_HASHES` and `upgrade_project_templates()` install missing default templates, update untouched default templates in place, and preserve user-modified templates while writing the new default to `<template>.default` (task `e04754`).
+  - `CONFIG_MIGRATIONS` and `run_config_migrations()` execute sequential `v -> v+1` schema migrations on staged `config.json` and `config.local.json` during `perform_transactional_upgrade`.
+
 

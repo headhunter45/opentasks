@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Set
 
 from ot.discovery import find_project_root
 
@@ -228,6 +229,24 @@ attendees: []
 }
 
 
+def _template_sha256(text: str) -> str:
+    """Compute SHA-256 of normalized template content."""
+    normalized = text.strip() + "\n"
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+# Registry of SHA-256 digests for all known built-in default templates across releases.
+KNOWN_DEFAULT_TEMPLATE_HASHES: Dict[str, Set[str]] = {
+    rel_path: {_template_sha256(content)}
+    for rel_path, content in DEFAULT_TEMPLATES.items()
+}
+
+
+def register_historical_template_hash(rel_path: str, sha256_hex: str) -> None:
+    """Register a historical built-in template SHA-256 digest for upgrade recognition."""
+    KNOWN_DEFAULT_TEMPLATE_HASHES.setdefault(rel_path, set()).add(sha256_hex)
+
+
 def install_default_templates(project_root: Optional[Path | str] = None, overwrite: bool = False) -> int:
     """Install default template files into configured templates directory (default .ot/templates/).
 
@@ -252,6 +271,56 @@ def install_default_templates(project_root: Optional[Path | str] = None, overwri
             installed_count += 1
 
     return installed_count
+
+
+def upgrade_project_templates(project_root: Optional[Path | str] = None) -> Dict[str, List[str]]:
+    """Non-destructively upgrade project templates during `ot upgrade`.
+
+    - Installs missing default templates.
+    - Updates existing templates in place if their SHA-256 matches a known built-in default hash.
+    - Preserves user-modified templates and writes the new default to `<template>.default`.
+    """
+    result: Dict[str, List[str]] = {
+        "installed": [],
+        "updated": [],
+        "preserved_with_default": [],
+    }
+    root = find_project_root(project_root)
+    if not root:
+        return result
+
+    try:
+        from ot.config import load_config
+        templates_dir = load_config(root).templates_dir
+    except Exception:
+        templates_dir = root / ".ot" / "templates"
+
+    for rel_path, content in DEFAULT_TEMPLATES.items():
+        normalized_new = content.strip() + "\n"
+        new_hash = hashlib.sha256(normalized_new.encode("utf-8")).hexdigest()
+        dest = templates_dir / rel_path
+
+        if not dest.exists():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(normalized_new, encoding="utf-8")
+            result["installed"].append(rel_path)
+            continue
+
+        existing_bytes = dest.read_bytes()
+        existing_hash = hashlib.sha256(existing_bytes).hexdigest()
+        if existing_hash == new_hash:
+            continue
+
+        known_hashes = KNOWN_DEFAULT_TEMPLATE_HASHES.get(rel_path, set())
+        if existing_hash in known_hashes:
+            dest.write_text(normalized_new, encoding="utf-8")
+            result["updated"].append(rel_path)
+        else:
+            default_sidecar = dest.with_name(dest.name + ".default")
+            default_sidecar.write_text(normalized_new, encoding="utf-8")
+            result["preserved_with_default"].append(rel_path)
+
+    return result
 
 
 def get_template(
