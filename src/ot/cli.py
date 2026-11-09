@@ -81,7 +81,36 @@ def format_task_row(short_id: str, item: WorkItem, total_width: int = 120) -> st
 def cmd_task_list(args: argparse.Namespace, config: Config) -> int:
     """List WorkItems in project."""
     index = load_index(config.project_root)
+
+    # Validate --type filter tokens against allowed types
+    type_tokens = index._normalize_filter_values(getattr(args, "type", None))
+    valid_types = list(config.work_item_types.keys()) if config.work_item_types else []
+    if type_tokens and valid_types:
+        for tok in type_tokens:
+            tok_low = tok.lower()
+            if not any(vt.lower().startswith(tok_low) for vt in valid_types):
+                print(
+                    f"Error: Invalid type filter '{tok}'. Allowed types: {', '.join(valid_types)}",
+                    file=sys.stderr,
+                )
+                return 1
+
+    # Validate --status filter tokens against allowed statuses
+    status_tokens = index._normalize_filter_values(getattr(args, "status", None))
+    valid_statuses = list(config.work_item_statuses.keys()) if config.work_item_statuses else []
+    if status_tokens and valid_statuses:
+        for tok in status_tokens:
+            tok_norm = tok.lower().replace("-", "_")
+            if not any(vs.lower().replace("-", "_").startswith(tok_norm) for vs in valid_statuses):
+                print(
+                    f"Error: Invalid status filter '{tok}'. Allowed statuses: {', '.join(valid_statuses)}",
+                    file=sys.stderr,
+                )
+                return 1
+
     items = index.filter(
+        item_id=getattr(args, "id", None),
+        title=getattr(args, "title", None),
         item_type=args.type,
         status=args.status,
         size=args.size,
@@ -688,11 +717,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     # list
     list_p = task_sub.add_parser("list", help="List work items")
+    list_p.add_argument("--id", action="append", help="Filter by ID prefix (repeatable or comma-separated)")
+    list_p.add_argument("--title", action="append", help="Filter by title prefix (repeatable or comma-separated)")
     list_p.add_argument("--status", "-s", action="append", help="Filter by status (repeatable or comma-separated)")
     list_p.add_argument("--type", "-t", action="append", help="Filter by type (repeatable or comma-separated)")
     list_p.add_argument("--size", action="append", help="Filter by size (repeatable or comma-separated)")
     list_p.add_argument("--tag", action="append", help="Filter by tag (repeatable or comma-separated)")
-    list_p.add_argument("--author", action="append", help="Filter by author name (repeatable or comma-separated)")
+    list_p.add_argument("--author", action="append", help="Filter by author name/email substring or /regex/")
     list_p.add_argument("--width", type=int, default=argparse.SUPPRESS, help="Override output width in columns")
     list_p.add_argument("--json", action="store_true", help="Output in JSON format")
 

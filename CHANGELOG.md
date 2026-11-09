@@ -5,3 +5,4 @@
 - Add `ot task update <id>` subcommand to update WorkItem frontmatter fields and overview via CLI flags (`efd404`).
 - Make default output width 120 columns (using full terminal width when `>= 120` and `80` when `< 120`) and add `--width` override (`dd2649`).
 - Support filtering `ot task list` by multiple columns, repeatable/comma-separated column values, and value prefixes (`984260`).
+- Add `--id` and `--title` filters, `--type`/`--status` allowed-value validation, and `--author` substring/`/regex/` matching to `ot task list` (`229d60`).

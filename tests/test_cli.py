@@ -5,7 +5,7 @@ import json
 import shutil
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from ot.cli import main
@@ -73,10 +73,10 @@ class TestCLICommands(unittest.TestCase):
         titles3 = {item["title"] for item in data3}
         self.assertEqual(titles3, {"Fix Login Crash on Null Password", "Setup Continuous Integration Pipeline"})
 
-        # Prefix matching from start of column value: -s tr,lan,in matches triage and in_progress, not planned
+        # Prefix matching from start of column value: -s tr,in matches triage and in_progress, not planned
         buf4 = io.StringIO()
         with redirect_stdout(buf4):
-            ret = main(["-C", str(self.root), "task", "list", "-s", "tr,lan,in", "--json"])
+            ret = main(["-C", str(self.root), "task", "list", "-s", "tr,in", "--json"])
         self.assertEqual(ret, 0)
         data4 = json.loads(buf4.getvalue())
         titles4 = {item["title"] for item in data4}
@@ -84,6 +84,74 @@ class TestCLICommands(unittest.TestCase):
             titles4,
             {"Release Alpha", "Implement User Authentication", "Fix Login Crash on Null Password"},
         )
+
+        # WorkItemIndex.filter directly verifies prefix-from-start ('lan' does not match 'planned')
+        from ot.scanner import load_index
+        idx = load_index(self.root)
+        filtered = idx.filter(status="tr,lan,in")
+        self.assertEqual(
+            {it.title for it in filtered},
+            {"Release Alpha", "Implement User Authentication", "Fix Login Crash on Null Password"},
+        )
+
+    def test_cli_task_list_frontmatter_filters_and_validation(self):
+        # --id and --title prefix matching
+        buf_all = io.StringIO()
+        with redirect_stdout(buf_all):
+            main(["-C", str(self.root), "task", "list", "--json"])
+        all_items = json.loads(buf_all.getvalue())
+        first_short = all_items[0]["short_id"]
+
+        buf_id = io.StringIO()
+        with redirect_stdout(buf_id):
+            ret = main(["-C", str(self.root), "task", "list", "--id", first_short[:4], "--json"])
+        self.assertEqual(ret, 0)
+        id_items = json.loads(buf_id.getvalue())
+        self.assertEqual(len(id_items), 1)
+        self.assertEqual(id_items[0]["short_id"], first_short)
+
+        buf_title = io.StringIO()
+        with redirect_stdout(buf_title):
+            ret = main(["-C", str(self.root), "task", "list", "--title", "Release,Fix Login", "--json"])
+        self.assertEqual(ret, 0)
+        title_items = json.loads(buf_title.getvalue())
+        self.assertEqual(
+            {it["title"] for it in title_items},
+            {"Release Alpha", "Fix Login Crash on Null Password"},
+        )
+
+        # Invalid --type prints allowed types and returns non-zero
+        err_type = io.StringIO()
+        with redirect_stderr(err_type):
+            ret = main(["-C", str(self.root), "task", "list", "-t", "nonexistent"])
+        self.assertEqual(ret, 1)
+        self.assertIn("Allowed types:", err_type.getvalue())
+
+        # Invalid --status (including middle substring like 'lan') prints allowed statuses and returns non-zero
+        err_status = io.StringIO()
+        with redirect_stderr(err_status):
+            ret = main(["-C", str(self.root), "task", "list", "-s", "tr,lan,in"])
+        self.assertEqual(ret, 1)
+        self.assertIn("Allowed statuses:", err_status.getvalue())
+
+        # --author substring and /regex/ matching against name and email
+        buf_auth_sub = io.StringIO()
+        with redirect_stdout(buf_auth_sub):
+            ret = main(["-C", str(self.root), "task", "list", "--author", "example.com", "--json"])
+        self.assertEqual(ret, 0)
+        self.assertGreater(len(json.loads(buf_auth_sub.getvalue())), 0)
+
+        buf_auth_re = io.StringIO()
+        with redirect_stdout(buf_auth_re):
+            ret = main(["-C", str(self.root), "task", "list", "--author", "/@example\\.com$/", "--json"])
+        self.assertEqual(ret, 0)
+        self.assertGreater(len(json.loads(buf_auth_re.getvalue())), 0)
+
+        buf_auth_nomatch = io.StringIO()
+        with redirect_stdout(buf_auth_nomatch):
+            ret = main(["-C", str(self.root), "task", "list", "--author", "/^nobody@nowhere\\.org$/", "--json"])
+        self.assertEqual(ret, 0)
+        self.assertEqual(len(json.loads(buf_auth_nomatch.getvalue())), 0)
 
     def test_cli_task_list_width(self):
         import os

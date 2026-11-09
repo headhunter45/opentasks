@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from pathlib import Path
+import re
 from typing import Dict, Iterable, List, Optional, Set
 
 from ot.config import Config, load_config
@@ -124,14 +125,40 @@ class WorkItemIndex:
         for item in raw_items:
             if not item:
                 continue
-            for part in str(item).split(","):
+            item_str = str(item).strip()
+            if len(item_str) >= 2 and item_str.startswith("/") and item_str.endswith("/"):
+                tokens.append(item_str)
+                continue
+            for part in item_str.split(","):
                 cleaned = part.strip()
                 if cleaned:
                     tokens.append(cleaned)
         return tokens
 
+    @staticmethod
+    def _matches_author(item: WorkItem, author_tokens: List[str]) -> bool:
+        if not item.meta.author:
+            return False
+        name = item.meta.author.name or ""
+        email = item.meta.author.email or ""
+        for token in author_tokens:
+            if len(token) >= 2 and token.startswith("/") and token.endswith("/"):
+                pattern = token[1:-1]
+                try:
+                    if re.search(pattern, name) or re.search(pattern, email):
+                        return True
+                except re.error:
+                    continue
+            else:
+                tok_low = token.lower()
+                if tok_low in name.lower() or tok_low in email.lower():
+                    return True
+        return False
+
     def filter(
         self,
+        item_id: Optional[str | Iterable[str]] = None,
+        title: Optional[str | Iterable[str]] = None,
         item_type: Optional[str | Iterable[str]] = None,
         status: Optional[str | Iterable[str]] = None,
         size: Optional[str | Iterable[str]] = None,
@@ -142,16 +169,28 @@ class WorkItemIndex:
 
         Multiple values for the same column are OR-ed together.
         Different columns are AND-ed together.
-        Values support case-insensitive prefix matching from the start of the column value.
+        Values support case-insensitive prefix matching from the start of the column value
+        (except author, which supports /regex/ or case-insensitive substring matching on name/email).
         """
+        id_vals = [v.lower() for v in self._normalize_filter_values(item_id)]
+        title_vals = [v.lower() for v in self._normalize_filter_values(title)]
         type_vals = [v.lower() for v in self._normalize_filter_values(item_type)]
         status_vals = [v.lower().replace("-", "_") for v in self._normalize_filter_values(status)]
         size_vals = [v.lower() for v in self._normalize_filter_values(size)]
         tag_vals = [v.lower() for v in self._normalize_filter_values(tag)]
-        author_vals = [v.lower() for v in self._normalize_filter_values(author_name)]
+        author_vals = self._normalize_filter_values(author_name)
 
         results = []
         for item in self.all():
+            if id_vals:
+                full_id = (item.id or "").lower()
+                short_id = self.get_short_id(item.id).lower()
+                if not any(full_id.startswith(v) or short_id.startswith(v) for v in id_vals):
+                    continue
+            if title_vals:
+                it_title = (item.title or "").lower()
+                if not any(it_title.startswith(v) for v in title_vals):
+                    continue
             if type_vals:
                 it_type = (item.type or "").lower()
                 if not any(it_type.startswith(v) for v in type_vals):
@@ -169,8 +208,7 @@ class WorkItemIndex:
                 if not any(any(t.startswith(v) for t in it_tags) for v in tag_vals):
                     continue
             if author_vals:
-                it_author = (item.meta.author.name if item.meta.author and item.meta.author.name else "").lower()
-                if not it_author or not any(it_author.startswith(v) for v in author_vals):
+                if not self._matches_author(item, author_vals):
                     continue
             results.append(item)
         return results
