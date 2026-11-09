@@ -7,3 +7,4 @@
 - Support filtering `ot task list` by multiple columns, repeatable/comma-separated column values, and value prefixes (`984260`).
 - Add `--id` and `--title` filters, `--type`/`--status` allowed-value validation, and `--author` substring/`/regex/` matching to `ot task list` (`229d60`).
 - Accept optional positional task IDs (space- or comma-separated) in `ot task list` with non-zero error reporting for missing IDs (`c05bac`).
+- Rename project wrapper scripts from `otw` / `otw.bat` to `oat` / `oat.bat` across `ot init` and `ot upgrade` (`f5ecb3`).

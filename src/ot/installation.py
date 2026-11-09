@@ -299,13 +299,13 @@ def init_project(
 
     # 5. Create wrapper scripts
     if create_wrappers:
-        otw = root / "otw"
-        if not otw.exists():
-            otw.write_text(WRAPPER_SCRIPT_SH, encoding="utf-8")
-            otw.chmod(0o755)
-        otw_bat = root / "otw.bat"
-        if not otw_bat.exists():
-            otw_bat.write_text(WRAPPER_SCRIPT_BAT, encoding="utf-8")
+        oat = root / "oat"
+        if not oat.exists():
+            oat.write_text(WRAPPER_SCRIPT_SH, encoding="utf-8")
+            oat.chmod(0o755)
+        oat_bat = root / "oat.bat"
+        if not oat_bat.exists():
+            oat_bat.write_text(WRAPPER_SCRIPT_BAT, encoding="utf-8")
 
     return {
         "project_root": root,

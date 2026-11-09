@@ -91,9 +91,9 @@ class TestGlobalLauncher(unittest.TestCase):
         )
         self.assertEqual(res_direct.returncode, 0)
 
-    def test_auto_download_on_config_version_change_in_ot_and_otw(self):
+    def test_auto_download_on_config_version_change_in_ot_and_oat(self):
         """Regression for 65e194: updating system.toolVersion in .ot/config.json
-        and running `ot task list` or `./otw task list` must automatically download
+        and running `ot task list` or `./oat task list` must automatically download
         and install `.ot/bin/<version>/ot.zipapp` + manifest while preserving old versions.
         """
         import json
@@ -153,21 +153,21 @@ class TestGlobalLauncher(unittest.TestCase):
             (Path(env["OT_USER_HOME"]) / "versions" / "0.2.0" / "ot.zipapp").is_file()
         )
 
-        # 2. Update config.json to 0.3.0 and run `./otw task list`
+        # 2. Update config.json to 0.3.0 and run `./oat task list`
         cfg["system"]["toolVersion"] = "0.3.0"
         cfg_file.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
 
-        res_otw = subprocess.run(
-            [str(proj_dir / "otw"), "task", "list"],
+        res_oat = subprocess.run(
+            [str(proj_dir / "oat"), "task", "list"],
             cwd=str(proj_dir),
             capture_output=True,
             text=True,
             env=env,
         )
         self.assertEqual(
-            res_otw.returncode,
+            res_oat.returncode,
             0,
-            f"./otw task list failed:\nSTDOUT: {res_otw.stdout}\nSTDERR: {res_otw.stderr}",
+            f"./oat task list failed:\nSTDOUT: {res_oat.stdout}\nSTDERR: {res_oat.stderr}",
         )
         self.assertTrue((proj_dir / ".ot" / "bin" / "0.3.0" / "ot.zipapp").is_file())
         self.assertTrue((proj_dir / ".ot" / "bin" / "0.3.0" / "ot-manifest.json").is_file())

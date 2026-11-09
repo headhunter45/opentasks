@@ -21,6 +21,7 @@ from ot.cache import (
 )
 from ot.config import load_json_file
 from ot.discovery import find_project_root
+from ot.installation import WRAPPER_SCRIPT_BAT, WRAPPER_SCRIPT_SH
 from ot.packaging import build_zipapp_artifact, compute_sha256
 from ot.templates import install_default_templates
 from ot.validation import Validator
@@ -200,6 +201,17 @@ def perform_transactional_upgrade(
 
         # Update templates
         install_default_templates(root, overwrite=False)
+
+        # Update project wrapper scripts (oat / oat.bat) and remove legacy otw / otw.bat
+        oat_sh = root / "oat"
+        oat_sh.write_text(WRAPPER_SCRIPT_SH, encoding="utf-8")
+        oat_sh.chmod(0o755)
+        oat_bat = root / "oat.bat"
+        oat_bat.write_text(WRAPPER_SCRIPT_BAT, encoding="utf-8")
+        for legacy_name in ("otw", "otw.bat"):
+            legacy_path = root / legacy_name
+            if legacy_path.is_file():
+                legacy_path.unlink()
 
     return {
         "status": "upgraded",

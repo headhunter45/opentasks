@@ -1,10 +1,10 @@
 # Agent Guidelines for Open Tasks (`ot`)
 
-This repository uses **Open Tasks (`ot` / `./otw`)** for repository-native task and planning management. All work items live in `.ot/tasks/` and meeting records in `.ot/meetings/`.
+This repository uses **Open Tasks (`ot` / `./oat`)** for repository-native task and planning management. All work items live in `.ot/tasks/` and meeting records in `.ot/meetings/`.
 
 ## Skills
 
-- **Task Management**: See [`.agents/skills/task-management/SKILL.md`](.agents/skills/task-management/SKILL.md) for querying, creating, triaging, and validating tasks with `./otw`.
+- **Task Management**: See [`.agents/skills/task-management/SKILL.md`](.agents/skills/task-management/SKILL.md) for querying, creating, triaging, and validating tasks with `./oat`.
 - **Executing Tasks**: See [`.agents/skills/execute-tasks/SKILL.md`](.agents/skills/execute-tasks/SKILL.md) for the step-by-step workflow when implementing tasks.
 
 ## Task Completion & `CHANGELOG.md` Rule

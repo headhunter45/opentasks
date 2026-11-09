@@ -58,6 +58,9 @@ class TestUpgradeSystem(unittest.TestCase):
     def test_perform_transactional_upgrade(self):
         proj_dir = self.root / "my_project"
         init_project(proj_dir, version="0.1.0")
+        # Simulate legacy otw / otw.bat wrappers from older release
+        (proj_dir / "otw").write_text("#!/bin/sh\n", encoding="utf-8")
+        (proj_dir / "otw.bat").write_text("@echo off\n", encoding="utf-8")
 
         # Upgrade to 0.2.0
         res = perform_transactional_upgrade(proj_dir, "0.2.0")
@@ -66,6 +69,12 @@ class TestUpgradeSystem(unittest.TestCase):
         # Verify config.json was updated
         cfg = json.loads((proj_dir / ".ot" / "config.json").read_text(encoding="utf-8"))
         self.assertEqual(cfg["system"]["toolVersion"], "0.2.0")
+
+        # Verify oat / oat.bat exist and legacy otw / otw.bat were removed
+        self.assertTrue((proj_dir / "oat").is_file())
+        self.assertTrue((proj_dir / "oat.bat").is_file())
+        self.assertFalse((proj_dir / "otw").exists())
+        self.assertFalse((proj_dir / "otw.bat").exists())
 
         # Verify new versioned binary and manifest were installed AND old version was preserved
         self.assertTrue((proj_dir / ".ot" / "bin" / "0.1.0" / "ot.zipapp").is_file())

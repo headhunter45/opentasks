@@ -32,7 +32,9 @@ class TestInstallationAndInit(unittest.TestCase):
             self.assertTrue((root / ".ot" / "templates" / "tasks" / "default.md").is_file())
             self.assertTrue((root / ".ot" / "bin" / "0.1.0" / "ot.zipapp").is_file())
             self.assertTrue((root / ".ot" / "bin" / "0.1.0" / "ot-manifest.json").is_file())
-            self.assertTrue((root / "otw").is_file())
+            self.assertTrue((root / "oat").is_file())
+            self.assertTrue((root / "oat.bat").is_file())
+            self.assertFalse((root / "otw").exists())
             self.assertTrue((root / ".gitignore").is_file())
             self.assertIn(".ot/bin/", (root / ".gitignore").read_text(encoding="utf-8"))
 

@@ -729,7 +729,7 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument("--version", "-v", help="Initial tool version")
     init_parser.add_argument("--description", "-d", help="Project description")
     init_parser.add_argument("--no-binary", action="store_true", help="Skip installing executable zipapp")
-    init_parser.add_argument("--no-wrappers", action="store_true", help="Skip creating otw / otw.bat scripts")
+    init_parser.add_argument("--no-wrappers", action="store_true", help="Skip creating oat / oat.bat scripts")
 
     # ot upgrade ...
     upgrade_parser = subparsers.add_parser("upgrade", help="Upgrade project Open Tasks installation")

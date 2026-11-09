@@ -2,24 +2,24 @@
 name: task-management
 description: >-
   Manage, query, create, triage, inspect, and update project tasks using Open Tasks
-  (ot / ./otw). Activate this skill whenever reading, creating, editing, prioritizing,
+  (ot / ./oat). Activate this skill whenever reading, creating, editing, prioritizing,
   or updating tasks, checklists, or project progress.
 ---
 
 # Task Management Skill
 
-This skill provides operational guidelines and procedures for managing project tasks using **Open Tasks (`ot` / `./otw`)**. All tasks, epics, bugs, and meeting records are stored directly in the repository under `.ot/tasks/` and `.ot/meetings/`.
+This skill provides operational guidelines and procedures for managing project tasks using **Open Tasks (`ot` / `./oat`)**. All tasks, epics, bugs, and meeting records are stored directly in the repository under `.ot/tasks/` and `.ot/meetings/`.
 
 ---
 
 ## Quick Reference
 
-In the repository root, run commands through the self-hosted wrapper `./otw` (or the global `ot` CLI):
+In the repository root, run commands through the self-hosted wrapper `./oat` (or the global `ot` CLI):
 
 ```bash
 # Verify project version and health
-./otw version
-./otw check
+./oat version
+./oat check
 ```
 
 ---
@@ -30,26 +30,26 @@ In the repository root, run commands through the self-hosted wrapper `./otw` (or
 
 - **List active work items**:
   ```bash
-  ./otw task list
+  ./oat task list
   ```
 - **Filter by status**:
   ```bash
-  ./otw task list --status planned
-  ./otw task list --status in_progress
-  ./otw task list --status completed
-  ./otw task list --status blocked
+  ./oat task list --status planned
+  ./oat task list --status in_progress
+  ./oat task list --status completed
+  ./oat task list --status blocked
   ```
 - **Filter by type**:
   ```bash
-  ./otw task list --type epic
-  ./otw task list --type feature
-  ./otw task list --type bug
-  ./otw task list --type chore
+  ./oat task list --type epic
+  ./oat task list --type feature
+  ./oat task list --type bug
+  ./oat task list --type chore
   ```
 - **Inspect a specific task** (by 6-char short ID, UUID, or title):
   ```bash
-  ./otw task show 075920
-  ./otw task show "Cleanup source tree."
+  ./oat task show 075920
+  ./oat task show "Cleanup source tree."
   ```
 
 ---
@@ -59,7 +59,7 @@ In the repository root, run commands through the self-hosted wrapper `./otw` (or
 Create new tasks using template instantiation:
 
 ```bash
-./otw task create \
+./oat task create \
   --title "Implement Cache Invalidation" \
   --type feature \
   --status planned \
@@ -79,16 +79,16 @@ Available sizes: `small`, `medium`, `large`.
 
 - **Update Task Status**:
   ```bash
-  ./otw task status "Implement Cache Invalidation" in_progress
-  ./otw task status "Implement Cache Invalidation" completed
+  ./oat task status "Implement Cache Invalidation" in_progress
+  ./oat task status "Implement Cache Invalidation" completed
   ```
 - **Append Timestamped Comment**:
   ```bash
-  ./otw task comment "Implement Cache Invalidation" "Implemented cache clearing on version mismatch."
+  ./oat task comment "Implement Cache Invalidation" "Implemented cache clearing on version mismatch."
   ```
 - **Add Task Dependency / Blocker**:
   ```bash
-  ./otw task add-dependency "Implement Cache Invalidation" "Build Cache Management"
+  ./oat task add-dependency "Implement Cache Invalidation" "Build Cache Management"
   ```
 
 ---
@@ -99,11 +99,11 @@ Run diagnostic checks before concluding tasks or submitting PRs:
 
 ```bash
 # Check repository integrity (UUID uniqueness, relationships, schema validity)
-./otw check
+./oat check
 
 # Output diagnostics as JSON
-./otw check --json
+./oat check --json
 
 # Automatically repair trivial inconsistencies
-./otw check --fix
+./oat check --fix
 ```

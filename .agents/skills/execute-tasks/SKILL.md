@@ -13,13 +13,13 @@ description: >-
 
 This skill defines the standardized procedure for executing a specific set of tasks sequentially with strict status validation, documentation updates, follow-up tracking, and per-task commits.
 
-Tasks are managed with Open Tasks via the project wrapper `./otw` (see the `task-management` skill). Tasks may be referenced by 6-character short ID, UUID, or title.
+Tasks are managed with Open Tasks via the project wrapper `./oat` (see the `task-management` skill). Tasks may be referenced by 6-character short ID, UUID, or title.
 
 ---
 
 ## 1. Task Status Validation & Confirmation
 
-Before starting execution on any given task, inspect its status using `./otw task show <ID>`:
+Before starting execution on any given task, inspect its status using `./oat task show <ID>`:
 
 - **Valid Statuses to Work On**:
   - `planned` (Ready for implementation)
@@ -56,19 +56,19 @@ graph TD
 
 ### Step A: Mark In Progress
 ```bash
-./otw task status <ID> in_progress
+./oat task status <ID> in_progress
 ```
 
 ### Step B: Implement Requirements
-1. Read the task using `./otw task show <ID>`.
+1. Read the task using `./oat task show <ID>`.
 2. Inspect the relevant source files in `src/ot/` and implement the requested changes, adhering to the ADRs in `docs/design/adrs/`.
-3. If partial implementation is required or edge cases emerge, record notes with `./otw task comment <ID> "..."`.
+3. If partial implementation is required or edge cases emerge, record notes with `./oat task comment <ID> "..."`.
 
 ### Step C: Verify & Test
 Run the test suite and project integrity check to ensure no regressions:
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests
-./otw check
+./oat check
 ```
 For changes affecting packaging or releases, also run:
 ```bash
@@ -88,14 +88,14 @@ Update the corresponding files accordingly.
 
 ### Step E: Mark Task Completed
 ```bash
-./otw task comment <ID> "Implementation notes: <summary>. Follow-up logged in <ID>."
-./otw task status <ID> completed
+./oat task comment <ID> "Implementation notes: <summary>. Follow-up logged in <ID>."
+./oat task status <ID> completed
 ```
 
 ### Step F: Record Newly Discovered Tasks
 If any new bugs, edge cases, refactor opportunities, or follow-ups are discovered, log them immediately in `triage` status:
 ```bash
-./otw task create \
+./oat task create \
   --title "Follow-up: <Descriptive Title>" \
   --type <feature|bug|chore|spike> \
   --status triage \
