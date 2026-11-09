@@ -72,6 +72,32 @@ class TestConfigLoader(unittest.TestCase):
             self.assertEqual(cfg.user_name, "Override User")
             self.assertEqual(cfg.editor, "vim")
             self.assertEqual(cfg.warnings, [])
+            self.assertEqual(cfg.tasks_dir, root / ".ot" / "tasks")
+            self.assertEqual(cfg.meetings_dir, root / ".ot" / "meetings")
+            self.assertEqual(cfg.templates_dir, root / ".ot" / "templates")
+
+    def test_configurable_paths_and_containment(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            ot_dir = root / ".ot"
+            ot_dir.mkdir()
+
+            proj_cfg = {
+                "paths": {
+                    "tasks": "docs/tasks",
+                    "meetings": "docs/meetings",
+                    "templates": "docs/templates",
+                }
+            }
+            (ot_dir / "config.json").write_text(json.dumps(proj_cfg), encoding="utf-8")
+
+            cfg = load_config(root)
+            self.assertEqual(cfg.tasks_dir, root / "docs" / "tasks")
+            self.assertEqual(cfg.meetings_dir, root / "docs" / "meetings")
+            self.assertEqual(cfg.templates_dir, root / "docs" / "templates")
+            self.assertTrue(cfg.is_within_project_root("docs/tasks"))
+            self.assertFalse(cfg.is_within_project_root("../outside"))
+            self.assertFalse(cfg.is_within_project_root("/etc/passwd"))
 
 
 if __name__ == "__main__":

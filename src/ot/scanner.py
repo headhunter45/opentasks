@@ -26,11 +26,16 @@ class RepositoryScanner:
         self.project_root = find_project_root(project_root)
 
     def scan_tasks_directory(self) -> List[WorkItem]:
-        """Scan .ot/tasks/ for all WorkItems."""
+        """Scan configured tasks directory (default .ot/tasks/) for all WorkItems."""
         if not self.project_root:
             return []
 
-        tasks_dir = self.project_root / ".ot" / "tasks"
+        try:
+            cfg = load_config(self.project_root)
+            tasks_dir = cfg.tasks_dir
+        except Exception:
+            tasks_dir = self.project_root / ".ot" / "tasks"
+
         if not tasks_dir.is_dir():
             return []
 

@@ -79,5 +79,9 @@ Negative:
 
 ## Amendments (As-Built)
 
-- **Implementation Tracking**: Implementing `paths.{tasks,meetings,templates}` resolution, containment validation, and adding `paths` to `PROTECTED_CONFIG_KEYS` is tracked in task `97aa42`.
+- **Implemented Directory Path Resolution & Validation (`src/ot/config.py`, `src/ot/scanner.py`, `src/ot/templates.py`, `src/ot/cli.py`, `src/ot/validation.py`)**:
+  - Added `paths.tasks` (`.ot/tasks`), `paths.meetings` (`.ot/meetings`), and `paths.templates` (`.ot/templates`) to `DEFAULT_CONFIG` and `PROTECTED_CONFIG_KEYS`, with `Config.tasks_dir`, `Config.meetings_dir`, `Config.templates_dir`, and `Config.is_within_project_root()` helpers (task `97aa42`).
+  - `Validator.validate_configuration()` emits `Severity.ERROR` if any `paths.*` value resolves outside `project_root`.
+  - `Validator.validate_filesystem()` validates the configured directories (repairable via `ot check --fix`) and emits a `WARNING` if a non-default path is configured while the legacy `.ot/<subdir>` still contains files so the user can move them with `git mv`.
+
 

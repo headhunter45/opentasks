@@ -23,6 +23,10 @@ PROTECTED_CONFIG_KEYS: Set[str] = {
     "project",
     "project.name",
     "project.description",
+    "paths",
+    "paths.tasks",
+    "paths.meetings",
+    "paths.templates",
     "workItem.types",
     "workItem.statuses",
     "workItem.sizes",
@@ -36,6 +40,11 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "project": {
         "name": "Open Tasks Project",
         "description": "",
+    },
+    "paths": {
+        "tasks": ".ot/tasks",
+        "meetings": ".ot/meetings",
+        "templates": ".ot/templates",
     },
     "user": {
         "name": None,
@@ -259,6 +268,59 @@ class Config:
     @property
     def work_item_sizes(self) -> Dict[str, Any]:
         return self.get("workItem.sizes", {})
+
+    @property
+    def tasks_rel_path(self) -> str:
+        val = self.get("paths.tasks")
+        return str(val) if isinstance(val, str) and val.strip() else ".ot/tasks"
+
+    @property
+    def meetings_rel_path(self) -> str:
+        val = self.get("paths.meetings")
+        return str(val) if isinstance(val, str) and val.strip() else ".ot/meetings"
+
+    @property
+    def templates_rel_path(self) -> str:
+        val = self.get("paths.templates")
+        return str(val) if isinstance(val, str) and val.strip() else ".ot/templates"
+
+    def is_within_project_root(self, target: Path | str) -> bool:
+        """Return True if target resolves inside self.project_root."""
+        if not self.project_root:
+            return True
+        root_resolved = self.project_root.resolve()
+        p = Path(target)
+        if not p.is_absolute():
+            p = self.project_root / p
+        try:
+            p.resolve().relative_to(root_resolved)
+            return True
+        except ValueError:
+            return False
+
+    @property
+    def tasks_dir(self) -> Path:
+        base = self.project_root or Path.cwd()
+        candidate = base / self.tasks_rel_path
+        if self.is_within_project_root(candidate):
+            return candidate
+        return base / ".ot" / "tasks"
+
+    @property
+    def meetings_dir(self) -> Path:
+        base = self.project_root or Path.cwd()
+        candidate = base / self.meetings_rel_path
+        if self.is_within_project_root(candidate):
+            return candidate
+        return base / ".ot" / "meetings"
+
+    @property
+    def templates_dir(self) -> Path:
+        base = self.project_root or Path.cwd()
+        candidate = base / self.templates_rel_path
+        if self.is_within_project_root(candidate):
+            return candidate
+        return base / ".ot" / "templates"
 
 
 def load_config(start_dir: Optional[Path | str] = None) -> Config:

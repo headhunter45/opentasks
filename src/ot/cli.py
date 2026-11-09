@@ -325,7 +325,7 @@ def cmd_task_create(args: argparse.Namespace, config: Config) -> int:
             item.body = f"{prefix}## Overview\n{args.overview}\n"
 
     # Determine file location
-    tasks_dir = config.project_root / ".ot" / "tasks"
+    tasks_dir = config.tasks_dir
     folder_name = sanitize_folder_name(title) if title else f"Task-{item_id[:6]}"
 
     if parent_id:

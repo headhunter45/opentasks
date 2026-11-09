@@ -5,6 +5,8 @@
 - Render `.ot/templates/` during WorkItem and comment creation (`37923d`).
 - Validate edited WorkItem before saving in `ot task edit` and `ot task create` (`36f1e1`).
 - Expand configuration validation and automatic repair in `ot check` (`a9c5de`).
+- Support configurable directory layout overrides in `.ot/config.json` (`97aa42`).
+
 
 
 

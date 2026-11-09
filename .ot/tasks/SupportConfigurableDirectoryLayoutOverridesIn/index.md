@@ -2,10 +2,10 @@
 id: 97aa42e8-aa75-4f08-82c7-60ab07d3c74f
 title: Support configurable directory layout overrides in .ot/config.json
 type: feature
-status: planned
+status: completed
 size: small
 created_at: 2026-11-09T18:36:33.816969+00:00
-updated_at: 2026-11-09T19:32:00.000000+00:00
+updated_at: 2026-11-09T20:51:39.952211+00:00
 author:
   name: Tom Hicks
   email: headhunter3@gmail.com
@@ -23,3 +23,9 @@ Support relocating `tasks`, `meetings`, and `templates` directories anywhere wit
 - [ ] When a path is reconfigured, create the new directory if needed (or via `ot check --fix`) without automatically moving files, and emit a `WARNING` in `ot check` if the non-default old `.ot/<subdir>` still contains files so the user can move them explicitly (e.g. with `git mv`).
 - [ ] Add unit tests for custom `paths` (such as `docs/tasks` and `docs/meetings`), path traversal rejection, and leftover-file warnings.
 
+## Comments
+
+### Comment by Tom Hicks <headhunter3@gmail.com> on 2026-11-09T20:51:39.282027+00:00
+<!-- comment-id: fe4132ae-6837-4b58-b2c5-2f77047c33a2 -->
+
+Added protected paths.{tasks,meetings,templates} configuration keys, Config directory helpers, project root containment validation, and leftover file warnings.

@@ -157,6 +157,52 @@ class TestValidationAndRepair(unittest.TestCase):
         self.assertEqual(ret, 0)
         self.assertIn("Repairs applied:", buf.getvalue())
 
+    def test_custom_paths_validation_and_leftover_warning(self):
+        import io
+        from contextlib import redirect_stdout
+
+        # 1. Configure custom paths.tasks = "docs/tasks" while .ot/tasks still has sample tasks
+        cfg_file = self.root / ".ot" / "config.json"
+        cfg_data = json.loads(cfg_file.read_text(encoding="utf-8"))
+        cfg_data["paths"] = {
+            "tasks": "docs/tasks",
+            "meetings": "docs/meetings",
+            "templates": ".ot/templates",
+        }
+        cfg_file.write_text(json.dumps(cfg_data, indent=2), encoding="utf-8")
+
+        validator = Validator(self.root)
+        diags = validator.validate_all()
+        messages = [d.message for d in diags]
+        self.assertTrue(any("Missing required directory: docs/tasks" in m for m in messages))
+        self.assertTrue(any("default directory '.ot/tasks' still contains files" in m for m in messages))
+
+        # Repair creates docs/tasks and docs/meetings without deleting .ot/tasks
+        repairer = Repairer(self.root)
+        repairs = repairer.repair()
+        self.assertTrue((self.root / "docs" / "tasks").is_dir())
+        self.assertTrue((self.root / "docs" / "meetings").is_dir())
+        self.assertTrue((self.root / ".ot" / "tasks").is_dir())
+
+        # Creating a task writes into docs/tasks
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            ret = main(["-C", str(self.root), "task", "create", "Custom Path Task", "--no-edit"])
+        self.assertEqual(ret, 0)
+        self.assertTrue((self.root / "docs" / "tasks" / "CustomPathTask" / "index.md").is_file())
+
+        # 2. Path escaping project_root produces ERROR
+        cfg_data["paths"]["tasks"] = "../escaped-tasks"
+        cfg_file.write_text(json.dumps(cfg_data, indent=2), encoding="utf-8")
+        validator2 = Validator(self.root)
+        diags2 = validator2.validate_configuration()
+        self.assertTrue(
+            any(
+                "resolves outside the project root" in d.message and d.severity == Severity.ERROR
+                for d in diags2
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

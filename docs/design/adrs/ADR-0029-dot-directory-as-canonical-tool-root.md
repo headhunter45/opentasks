@@ -66,7 +66,8 @@ Negative:
 
 ## Amendments (As-Built)
 
-- **Canonical Default Paths**: `.ot/` is used across `src/ot/` as the canonical root for `bin/`, `config.json`, `config.local.json`, `tasks/`, `meetings/`, and `templates/`.
-- **Deferred / Partial Scope**:
-  - Relocating content directories (`tasks`, `meetings`, `templates`) via configuration keys in `.ot/config.json` is not yet implemented and is tracked in task `97aa42`.
+- **Canonical Default Paths & Configurable Overrides (`src/ot/config.py`, `src/ot/scanner.py`, `src/ot/templates.py`, `src/ot/validation.py`)**:
+  - `.ot/` is the canonical project root marker and fixed location for `bin/`, `config.json`, and `config.local.json`.
+  - Content directories default to `.ot/tasks`, `.ot/meetings`, and `.ot/templates` and may be relocated anywhere within the project root via protected `paths.{tasks,meetings,templates}` keys in `.ot/config.json` (task `97aa42`, ADR-0036).
+
 

@@ -92,14 +92,20 @@ class Validator:
         if not self.project_root:
             return diagnostics
 
+        tasks_rel = self.config.tasks_rel_path if self.config else ".ot/tasks"
+        templates_rel = self.config.templates_rel_path if self.config else ".ot/templates"
+        meetings_rel = self.config.meetings_rel_path if self.config else ".ot/meetings"
+
         required_dirs = [
             (".ot", "Canonical tool root", True),
-            (".ot/tasks", "WorkItem repository", True),
-            (".ot/templates", "Templates directory", True),
-            (".ot/meetings", "Meetings directory", True),
+            (tasks_rel, "WorkItem repository", True),
+            (templates_rel, "Templates directory", True),
+            (meetings_rel, "Meetings directory", True),
         ]
 
         for rel_path, desc, fixable in required_dirs:
+            if self.config and not self.config.is_within_project_root(rel_path):
+                continue
             p = self.project_root / rel_path
             if not p.exists():
                 diagnostics.append(
@@ -112,6 +118,31 @@ class Validator:
                         repair_action=f"Create directory {rel_path}",
                     )
                 )
+
+        # Warn if a custom directory is configured while the default .ot/<subdir> still contains files
+        for sub_key, configured_rel, default_rel in [
+            ("tasks", tasks_rel, ".ot/tasks"),
+            ("meetings", meetings_rel, ".ot/meetings"),
+            ("templates", templates_rel, ".ot/templates"),
+        ]:
+            if self.config and not self.config.is_within_project_root(configured_rel):
+                continue
+            cfg_dir = (self.project_root / configured_rel).resolve()
+            def_dir = (self.project_root / default_rel).resolve()
+            if cfg_dir != def_dir and def_dir.is_dir():
+                if any(f.is_file() for f in def_dir.rglob("*")):
+                    diagnostics.append(
+                        Diagnostic(
+                            severity=Severity.WARNING,
+                            category="filesystem",
+                            message=(
+                                f"Configured 'paths.{sub_key}' is '{configured_rel}', but default directory "
+                                f"'{default_rel}' still contains files. Move them manually (e.g. with 'git mv')."
+                            ),
+                            file_path=def_dir,
+                            is_fixable=False,
+                        )
+                    )
 
         return diagnostics
 
@@ -244,6 +275,21 @@ class Validator:
                     is_fixable=False,
                 )
             )
+
+        # 5. Directory layout path containment check
+        if self.config:
+            for sub_key in ("tasks", "meetings", "templates"):
+                raw_path = self.config.get(f"paths.{sub_key}")
+                if not isinstance(raw_path, str) or not raw_path.strip() or not self.config.is_within_project_root(raw_path):
+                    diagnostics.append(
+                        Diagnostic(
+                            severity=Severity.ERROR,
+                            category="config",
+                            message=f"Configured path 'paths.{sub_key}' ('{raw_path}') resolves outside the project root.",
+                            file_path=proj_cfg_path,
+                            is_fixable=False,
+                        )
+                    )
 
         from ot.version import validate_project_version
         is_v_valid, v_err = validate_project_version(self.project_root)
@@ -401,7 +447,7 @@ class Validator:
         if not self.project_root:
             return diagnostics
 
-        tasks_dir = self.project_root / ".ot" / "tasks"
+        tasks_dir = self.config.tasks_dir if self.config else (self.project_root / ".ot" / "tasks")
         if not tasks_dir.is_dir():
             return diagnostics
 

@@ -229,7 +229,7 @@ attendees: []
 
 
 def install_default_templates(project_root: Optional[Path | str] = None, overwrite: bool = False) -> int:
-    """Install default template files into .ot/templates/ in project root.
+    """Install default template files into configured templates directory (default .ot/templates/).
 
     Returns the count of new templates installed.
     """
@@ -237,7 +237,11 @@ def install_default_templates(project_root: Optional[Path | str] = None, overwri
     if not root:
         return 0
 
-    templates_dir = root / ".ot" / "templates"
+    try:
+        from ot.config import load_config
+        templates_dir = load_config(root).templates_dir
+    except Exception:
+        templates_dir = root / ".ot" / "templates"
     installed_count = 0
 
     for rel_path, content in DEFAULT_TEMPLATES.items():
@@ -256,11 +260,16 @@ def get_template(
 ) -> Optional[str]:
     """Retrieve template content by name (e.g. 'tasks/bug.md' or 'tasks/default.md').
 
-    Checks project-local .ot/templates first, falling back to built-in templates.
+    Checks project-local configured templates directory first, falling back to built-in templates.
     """
     root = find_project_root(project_root)
     if root:
-        local_file = root / ".ot" / "templates" / name
+        try:
+            from ot.config import load_config
+            templates_dir = load_config(root).templates_dir
+        except Exception:
+            templates_dir = root / ".ot" / "templates"
+        local_file = templates_dir / name
         if local_file.is_file():
             return local_file.read_text(encoding="utf-8")
 
