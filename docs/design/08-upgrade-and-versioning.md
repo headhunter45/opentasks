@@ -220,6 +220,7 @@ Initialization should:
 - Create default templates
 - Install the requested implementation
 - Create required folders
+- Ensure `.ot/bin/` is listed in `.gitignore`
 
 Example:
 
