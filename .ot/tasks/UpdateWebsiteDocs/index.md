@@ -2,10 +2,10 @@
 id: 29ba55c6-63aa-4e18-adea-d0fc6777c735
 title: Update website docs.
 type: chore
-status: planned
+status: completed
 size: small
 created_at: 2026-10-21T05:46:02.138506+00:00
-updated_at: 2026-11-09T07:31:00+00:00
+updated_at: 2026-11-09T08:13:34.124581+00:00
 author:
   name: Tom Hicks
   email: headhunter3@gmail.com
@@ -27,3 +27,10 @@ Update `web/index.html`, `README.md`, and `docs/design/` to reflect the new CLI 
 - `.ot/bin/<version>/ot.zipapp` versioned binary layout
 - `ot task update <id>` subcommand
 - Multi-column / multi-value / positional ID filtering in `ot task list` and positional title in `ot task create`
+
+## Comments
+
+### Comment by Tom Hicks <headhunter3@gmail.com> on 2026-11-09T08:13:33.729144+00:00
+<!-- comment-id: 8415b107-a72f-4c3e-971f-b79b7dba9224 -->
+
+Implementation notes: Updated web/index.html, README.md, and docs/design/ to document oat/oat.bat wrappers, .ot/bin/<version>/ot.zipapp layout, ot task update, and enhanced ot task list / ot task create options.

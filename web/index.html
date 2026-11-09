@@ -232,7 +232,7 @@
               <div class="feature-icon">⚡</div>
               <h3 class="feature-title">Optional Wrapper Scripts</h3>
               <p class="feature-text">
-                Project wrappers (<code>./otw</code> and <code>./otw.bat</code>)
+                Project wrappers (<code>./oat</code> and <code>./oat.bat</code>)
                 allow team members to run project-locked versions without global
                 machine installations.
               </p>
@@ -294,11 +294,11 @@
 <span class="output">Initialized Open Tasks project in /Users/dev/my-project/.ot
 Created configuration in .ot/config.json
 Installed default templates in .ot/templates/
-Installed project binary in .ot/bin/ot.zipapp
-Created wrapper script: otw</span>
+Installed project binary in .ot/bin/__OT_VERSION__/ot.zipapp
+Created wrapper scripts: oat, oat.bat</span>
 
 <span class="comment"># Verify project version</span>
-<span class="cmd">$ ./otw version</span>
+<span class="cmd">$ ./oat version</span>
 <span class="output">Open Tasks v__OT_VERSION__
 Project root:       /Users/dev/my-project
 Configured version: __OT_VERSION__
@@ -306,29 +306,29 @@ Installed version:  __OT_VERSION__</span></code></pre>
             </div>
 
             <div class="tab-content" id="tab-content-task">
-              <pre><code><span class="comment"># Create a new feature task with template generation</span>
-<span class="cmd">$ ./otw task create --title "User Authentication Flow" --type feature --size medium</span>
+              <pre><code><span class="comment"># Create a new feature task with positional title or flags</span>
+<span class="cmd">$ ./oat task create "User Authentication Flow" --type feature --size medium</span>
 <span class="output">Created work item: 4a9f2b (User Authentication Flow)
 Location: .ot/tasks/UserAuthenticationFlow/index.md</span>
 
-<span class="comment"># Query the active backlog</span>
-<span class="cmd">$ ./otw task list --status planned</span>
+<span class="comment"># Query by multiple columns, comma-separated values, prefixes, or positional IDs</span>
+<span class="cmd">$ ./oat task list -s triage,planned -t feature,bug</span>
 <span class="output">ID       Title                        Type         Status
 -------- ---------------------------- ------------ ------------
 4a9f2b   User Authentication Flow     Feature      Planned</span>
 
-<span class="comment"># Transition task lifecycle & add comment</span>
-<span class="cmd">$ ./otw task status "User Authentication Flow" in_progress</span>
-<span class="cmd">$ ./otw task comment "User Authentication Flow" "Integrating OAuth2 token validation."</span></code></pre>
+<span class="comment"># Update frontmatter fields &amp; add comments via CLI</span>
+<span class="cmd">$ ./oat task update 4a9f2b --status in_progress --size large --tag auth,security</span>
+<span class="cmd">$ ./oat task comment 4a9f2b "Integrating OAuth2 token validation."</span></code></pre>
             </div>
 
             <div class="tab-content" id="tab-content-check">
               <pre><code><span class="comment"># Perform zero-warning diagnostic check across all tasks & frontmatter</span>
-<span class="cmd">$ ./otw check</span>
+<span class="cmd">$ ./oat check</span>
 <span class="output">Project check passed: No errors or warnings detected.</span>
 
 <span class="comment"># Machine-readable JSON output for CI/CD gates</span>
-<span class="cmd">$ ./otw check --json</span>
+<span class="cmd">$ ./oat check --json</span>
 <span class="output">[]</span></code></pre>
             </div>
 
@@ -522,7 +522,7 @@ Successfully upgraded project from 0.1.0 to 0.2.0.</span></code></pre>
                 <p class="phase-desc">
                   Eliminates global tool version conflicts by packaging
                   standalone Python zipapps and providing transparent project
-                  wrappers (<code>./otw</code>).
+                  wrappers (<code>./oat</code>).
                 </p>
               </div>
               <div class="phase-meta">

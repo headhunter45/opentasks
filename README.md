@@ -29,21 +29,21 @@ Or download the latest standalone binary directly from [GitHub Releases](https:/
 
 ### Repository Workflow
 
-Open Tasks self-hosts its own task tracking directly within this repository using the `./otw` project wrapper:
+Open Tasks self-hosts its own task tracking directly within this repository using the `./oat` project wrapper:
 
 ```bash
 # Verify project version & integrity
-./otw version
-./otw check
+./oat version
+./oat check
 
-# Query the active backlog
-./otw task list
+# Query the active backlog (supports multi-column, comma-separated, prefix, and positional ID filtering)
+./oat task list -s triage,planned,in_progress
 
 # Create a new feature task
-./otw task create --title "My New Feature" --type feature --size medium
+./oat task create "My New Feature" --type feature --size medium
 
-# Progress a task's status
-./otw task status "My New Feature" in_progress
+# Update a task's status or frontmatter fields
+./oat task update "My New Feature" --status in_progress --tag core
 ```
 
 ### Running Unit Tests & Coverage

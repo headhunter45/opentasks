@@ -34,8 +34,8 @@ ot
 Optional project-local wrappers:
 
 ```bash
-./otw
-./otw.bat
+./oat
+./oat.bat
 ```
 
 Both interfaces are expected to provide identical behavior.
@@ -217,6 +217,12 @@ Create a new WorkItem.
 Example:
 
 ```bash
+ot task create "Fix login button"
+```
+
+or
+
+```bash
 ot task create --title "Fix login button"
 ```
 
@@ -278,17 +284,31 @@ Example:
 ot task list
 ```
 
-Filtering examples:
+Positional ID and multi-column/multi-value filtering examples:
 
 ```bash
-ot task list --status triage
+ot task list 4f2a9c,8b1c0e
 
-ot task list --type bug
+ot task list -s triage,planned -t bug,chore
 
-ot task list --size large
+ot task list --id 4f2a --title "Fix" --author "/@example\\.com$/"
+
+ot task list --width 120
 ```
 
-Output is intended to resemble summary tables.
+Output is intended to resemble summary tables (default width 120 columns when terminal width is `>= 120` or non-interactive, `80` when `< 120`, or overridden via `--width`).
+
+---
+
+## ot task update
+
+Update WorkItem frontmatter fields or overview non-interactively via CLI flags.
+
+Example:
+
+```bash
+ot task update 4f2a9c --title "New Title" --status in_progress --type bug --size medium --tag ui,urgent --overview "Updated summary"
+```
 
 ---
 

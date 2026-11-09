@@ -8,3 +8,4 @@
 - Add `--id` and `--title` filters, `--type`/`--status` allowed-value validation, and `--author` substring/`/regex/` matching to `ot task list` (`229d60`).
 - Accept optional positional task IDs (space- or comma-separated) in `ot task list` with non-zero error reporting for missing IDs (`c05bac`).
 - Rename project wrapper scripts from `otw` / `otw.bat` to `oat` / `oat.bat` across `ot init` and `ot upgrade` (`f5ecb3`).
+- Update website, `README.md`, and design documentation for `oat`, versioned `.ot/bin/<version>/` binaries, `ot task update`, and enhanced `ot task list` / `ot task create` CLI options (`29ba55`).

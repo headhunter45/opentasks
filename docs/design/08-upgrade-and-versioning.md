@@ -465,8 +465,8 @@ See:
 Projects may contain:
 
 ```text
-otw
-otw.bat
+oat
+oat.bat
 ```
 
 These wrappers are optional.

@@ -31,8 +31,8 @@ The project root is the root directory of an OT project.
 The project root may contain:
 
 ```text
-otw
-otw.bat
+oat
+oat.bat
 .ot/
 ```
 
@@ -45,8 +45,8 @@ Wrapper scripts are optional.
 Recommended names:
 
 ```text
-otw
-otw.bat
+oat
+oat.bat
 ```
 
 Wrapper scripts exist outside `.ot` because they are intended to be executed directly by users and automation systems.
@@ -147,9 +147,8 @@ contains OT implementation files.
 Examples:
 
 ```text
-.ot/bin/ot.py
-.ot/bin/cache/
-.ot/bin/versions/
+.ot/bin/0.1.3/ot.zipapp
+.ot/bin/0.1.3/ot-manifest.json
 ```
 
 Files in this directory are managed by OT.
