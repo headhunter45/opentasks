@@ -76,4 +76,6 @@ Negative:
   - Recreates missing required directories (`.ot`, `.ot/tasks`, `.ot/templates`, `.ot/meetings`).
   - Moves protected configuration keys from `.ot/config.local.json` to `.ot/config.json`.
   - Removes self-dependencies from WorkItems.
+- **Deferred / Partial Scope**:
+  - Parent/dependency cycle detection, relative Markdown link validation, and file-vs-directory (`SomeTask.md` -> `SomeTask/index.md`) conflict detection and repair are tracked in task `46cc7b`.
 

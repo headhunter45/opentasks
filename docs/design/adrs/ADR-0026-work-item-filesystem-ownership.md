@@ -82,5 +82,5 @@ Open Questions:
 - **Child WorkItem Representation**:
   - When a WorkItem is created with `--parent <parent>`, its directory is placed directly inside the parent WorkItem's directory (`.ot/tasks/<ParentFolder>/<ChildFolder>/index.md`) alongside setting `parent: <parent_uuid>` in YAML frontmatter.
 - **Attachments**:
-  - Dedicated attachment CLI subcommands (`ot attachment ...`) are not yet implemented; attachments placed within a WorkItem's directory subtree remain co-located with that WorkItem.
+  - Dedicated attachment CLI subcommands (`ot attachment ...`) and attachment ownership validation are not yet implemented and are tracked in task `ba1cd2`; attachments placed within a WorkItem's directory subtree remain co-located with that WorkItem.
 

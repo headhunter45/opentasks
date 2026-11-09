@@ -55,6 +55,12 @@ ADRs describe why the system works that way.
 | ADR-0028 | Project Root Discovery | Accepted |
 | ADR-0029 | .ot Directory As Canonical Tool Root | Accepted |
 | ADR-0030 | Identity and Editor Resolution | Accepted |
+| ADR-0031 | Zero-Dependency Python 3.11+ ZipApp Packaging | Accepted |
+| ADR-0032 | YAML Frontmatter and Unidirectional Relationship Storage | Accepted |
+| ADR-0033 | Attachment Ownership, Relative Markdown Links, and Validation Scope | Accepted |
+| ADR-0034 | Meeting Directory Layout and Frontmatter Lifecycle State | Accepted |
+| ADR-0035 | Non-Destructive Template Upgrades and Sequential Schema Migrations | Accepted |
+| ADR-0036 | Configurable Content Directory Paths Within Project Root | Accepted |
 
 ---
 

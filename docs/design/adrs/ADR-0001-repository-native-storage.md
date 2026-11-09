@@ -106,3 +106,10 @@ Negative:
 - Reporting may require file scans
 - Large repositories may require optimization
 - Users must understand source control workflows
+
+## Amendments (As-Built)
+
+- **Implemented Repository Artifacts**: Work items (`.ot/tasks/`), templates (`.ot/templates/`), and project configuration (`.ot/config.json`) are stored and managed in the repository.
+- **Deferred / Partial Scope**:
+  - Dedicated CLI commands for meetings (`ot meeting ...`) and attachments (`ot attachment ...`) are tracked in tasks `a9baac` and `ba1cd2`.
+

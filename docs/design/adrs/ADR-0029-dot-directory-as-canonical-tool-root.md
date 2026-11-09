@@ -63,3 +63,10 @@ Positive:
 Negative:
 
 - Large projects may accumulate many files beneath .ot
+
+## Amendments (As-Built)
+
+- **Canonical Default Paths**: `.ot/` is used across `src/ot/` as the canonical root for `bin/`, `config.json`, `config.local.json`, `tasks/`, `meetings/`, and `templates/`.
+- **Deferred / Partial Scope**:
+  - Relocating content directories (`tasks`, `meetings`, `templates`) via configuration keys in `.ot/config.json` is not yet implemented and is tracked in task `97aa42`.
+

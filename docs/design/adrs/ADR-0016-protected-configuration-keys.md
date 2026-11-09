@@ -75,5 +75,5 @@ Negative:
   - `workItem.types`, `workItem.statuses`, `workItem.sizes`
   - `meeting.types`
   *(Note: Identifier formats are not configurable keys in `.ot/config.json` and are therefore not part of `PROTECTED_CONFIG_KEYS`.)*
-- **Detection & Automatic Repair**: `find_protected_key_violations` flags any protected keys present in `.ot/config.local.json` with a `WARNING` diagnostic during `ot check`, and `ot check --fix` (`Repairer.repair` in `src/ot/validation.py`) automatically migrates protected sections (`workItem`, `meeting`, `system`, `project`) from `.ot/config.local.json` into `.ot/config.json`.
+- **Detection & Automatic Repair**: `find_protected_key_violations` flags any protected keys present in `.ot/config.local.json` with a `WARNING` diagnostic during `ot check`, and `ot check --fix` (`Repairer.repair` in `src/ot/validation.py`) automatically migrates protected sections (`workItem`, `meeting`, `system`, `project`) from `.ot/config.local.json` into `.ot/config.json`. Extending protected-key checks to `~/.ot/config.json` and `ot config set` is tracked in tasks `a9c5de` and `30dc47`.
 

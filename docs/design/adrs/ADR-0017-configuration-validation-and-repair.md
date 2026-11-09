@@ -73,4 +73,6 @@ Negative:
   - Detects protected configuration keys placed in `.ot/config.local.json` (`Severity.WARNING`, fixable).
 - **Implemented Configuration Repairs (`Repairer.repair` in `src/ot/validation.py`)**:
   - `ot check --fix` moves protected top-level sections (`workItem`, `meeting`, `system`, `project`) from `.ot/config.local.json` into `.ot/config.json`.
+- **Deferred / Partial Scope**:
+  - Validating `~/.ot/config.json`, cross-layer `configSchemaVersion` compatibility, and fine-grained dotted key repair are tracked in task `a9c5de`.
 

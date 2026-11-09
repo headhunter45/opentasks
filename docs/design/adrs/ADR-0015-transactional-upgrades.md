@@ -71,4 +71,6 @@ Negative:
   3. Supports `--dry-run` to verify artifact availability without modifying the project.
   4. Copies `.ot/` into a `tempfile.TemporaryDirectory()` staging workspace, updates `system.toolVersion` in the staged `config.json`, installs `.ot/bin/<target_version>/ot.zipapp` + `ot-manifest.json`, installs any new default templates (`overwrite=False`), and runs `Validator(staging).validate_all()`.
   5. Only if zero `Severity.ERROR` diagnostics occur in staging are changes committed to the real `.ot/` directory, preserving any older `.ot/bin/<old_version>/` directories, refreshing `oat` / `oat.bat`, and removing legacy `otw` / `otw.bat` scripts.
+- **Deferred / Partial Scope**:
+  - Multi-version configuration schema migration steps and modified-template merge/migration handling during upgrades are tracked in task `e04754`.
 

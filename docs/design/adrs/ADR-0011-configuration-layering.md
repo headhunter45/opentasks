@@ -81,3 +81,10 @@ Negative:
 
 - Additional lookup logic
 - Additional validation requirements
+
+## Amendments (As-Built)
+
+- **Implemented Layering (`src/ot/config.py`)**: `load_config` merges `DEFAULT_CONFIG`, `~/.ot/config.json`, `.ot/config.json`, and `.ot/config.local.json` with VCS and environment fallbacks.
+- **Deferred / Partial Scope**:
+  - CLI commands for inspecting and modifying configuration layers (`ot config get`, `ot config set`, `ot config list`) are tracked in task `30dc47`.
+
