@@ -118,28 +118,59 @@ def cmd_task_list(args: argparse.Namespace, config: Config) -> int:
         author_name=args.author,
     )
 
+    pos_id_tokens = index._normalize_filter_values(getattr(args, "ids", None))
+    unmatched_ids: List[str] = []
+    if pos_id_tokens:
+        all_items = index.all()
+        for tok in pos_id_tokens:
+            tok_low = tok.lower()
+            if not any(
+                (it.id or "").lower().startswith(tok_low)
+                or index.get_short_id(it.id).lower().startswith(tok_low)
+                for it in all_items
+            ):
+                unmatched_ids.append(tok)
+
+        pos_lower = [t.lower() for t in pos_id_tokens]
+        items = [
+            it
+            for it in items
+            if any(
+                (it.id or "").lower().startswith(p)
+                or index.get_short_id(it.id).lower().startswith(p)
+                for p in pos_lower
+            )
+        ]
+
     if getattr(args, "json", False):
         data = []
         for item in items:
             d = item.meta.to_dict()
             d["short_id"] = index.get_short_id(item.id)
             data.append(d)
+        for missing_id in unmatched_ids:
+            data.append({"id": missing_id, "exists": False})
         print(json.dumps(data, indent=2))
-        return 0
+        return 1 if unmatched_ids else 0
 
     if not items:
-        print("No work items found.")
-        return 0
+        if not unmatched_ids:
+            print("No work items found.")
+            return 0
+    else:
+        total_width = resolve_output_width(args, config)
+        title_width = max(20, total_width - 35)
+        header = f"{'ID':<8} {'Title':<{title_width}} {'Type':<12} {'Status':<12}"
+        divider = f"{'-'*8} {'-'*title_width} {'-'*12} {'-'*12}"
+        print(header)
+        print(divider)
+        for item in items:
+            short_id = index.get_short_id(item.id)
+            print(format_task_row(short_id, item, total_width=total_width))
 
-    total_width = resolve_output_width(args, config)
-    title_width = max(20, total_width - 35)
-    header = f"{'ID':<8} {'Title':<{title_width}} {'Type':<12} {'Status':<12}"
-    divider = f"{'-'*8} {'-'*title_width} {'-'*12} {'-'*12}"
-    print(header)
-    print(divider)
-    for item in items:
-        short_id = index.get_short_id(item.id)
-        print(format_task_row(short_id, item, total_width=total_width))
+    if unmatched_ids:
+        print(f"Error: Task ID(s) not found: {', '.join(unmatched_ids)}", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -717,6 +748,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # list
     list_p = task_sub.add_parser("list", help="List work items")
+    list_p.add_argument("ids", nargs="*", help="Optional task IDs (space or comma separated)")
     list_p.add_argument("--id", action="append", help="Filter by ID prefix (repeatable or comma-separated)")
     list_p.add_argument("--title", action="append", help="Filter by title prefix (repeatable or comma-separated)")
     list_p.add_argument("--status", "-s", action="append", help="Filter by status (repeatable or comma-separated)")

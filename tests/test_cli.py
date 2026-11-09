@@ -153,6 +153,46 @@ class TestCLICommands(unittest.TestCase):
         self.assertEqual(ret, 0)
         self.assertEqual(len(json.loads(buf_auth_nomatch.getvalue())), 0)
 
+    def test_cli_task_list_positional_ids(self):
+        buf_all = io.StringIO()
+        with redirect_stdout(buf_all):
+            main(["-C", str(self.root), "task", "list", "--json"])
+        all_items = json.loads(buf_all.getvalue())
+        id1 = all_items[0]["short_id"]
+        id2 = all_items[1]["short_id"]
+
+        # Space-separated positional IDs
+        buf_space = io.StringIO()
+        with redirect_stdout(buf_space):
+            ret = main(["-C", str(self.root), "task", "list", id1, id2, "--json"])
+        self.assertEqual(ret, 0)
+        self.assertEqual({it["short_id"] for it in json.loads(buf_space.getvalue())}, {id1, id2})
+
+        # Comma-separated positional IDs
+        buf_comma = io.StringIO()
+        with redirect_stdout(buf_comma):
+            ret = main(["-C", str(self.root), "task", "list", f"{id1},{id2}", "--json"])
+        self.assertEqual(ret, 0)
+        self.assertEqual({it["short_id"] for it in json.loads(buf_comma.getvalue())}, {id1, id2})
+
+        # Mix of matched and unmatched IDs in table mode: prints matched rows, errors on stderr, returns 1
+        out_tbl = io.StringIO()
+        err_tbl = io.StringIO()
+        with redirect_stdout(out_tbl), redirect_stderr(err_tbl):
+            ret = main(["-C", str(self.root), "task", "list", f"{id1},deadbeef"])
+        self.assertEqual(ret, 1)
+        self.assertIn(id1, out_tbl.getvalue())
+        self.assertIn("deadbeef", err_tbl.getvalue())
+
+        # Mix of matched and unmatched IDs in --json mode: includes {"id": "deadbeef", "exists": false}, returns 1
+        out_json = io.StringIO()
+        with redirect_stdout(out_json):
+            ret = main(["-C", str(self.root), "task", "list", id1, "deadbeef", "--json"])
+        self.assertEqual(ret, 1)
+        data = json.loads(out_json.getvalue())
+        self.assertEqual(len(data), 2)
+        self.assertIn({"id": "deadbeef", "exists": False}, data)
+
     def test_cli_task_list_width(self):
         import os
 

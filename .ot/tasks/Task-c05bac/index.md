@@ -2,10 +2,10 @@
 id: c05bac53-fd64-4a79-b77c-a5238b299133
 title: Add task id to `ot task list` as the unnamed parameter.
 type: feature
-status: planned
+status: completed
 size: small
 created_at: 2026-10-22T01:26:04.356768+00:00
-updated_at: 2026-11-09T07:31:00+00:00
+updated_at: 2026-11-09T08:05:32.028309+00:00
 author:
   name: Tom Hicks
   email: headhunter3@gmail.com
@@ -22,3 +22,10 @@ author:
 - Returns tasks matching any of the positional IDs (prefix or full UUID match).
 - If any requested task IDs are unmatched, lists the ones that do match and ends with an error message on stderr naming the IDs that do not exist, returning a non-zero exit code.
 - If `--json` is specified, includes the unmatched IDs in the JSON output marked as non-existing (`{"id": "<id>", "exists": false}`), and still returns a non-zero exit code.
+
+## Comments
+
+### Comment by Tom Hicks <headhunter3@gmail.com> on 2026-11-09T08:05:31.669117+00:00
+<!-- comment-id: 207e2f24-722c-4b87-9c24-b3106bd072d2 -->
+
+Implementation notes: Added positional ids argument to ot task list supporting space- and comma-separated task IDs, reporting unmatched IDs on stderr (or as {"id": "...", "exists": false} in --json mode) and returning exit code 1.
