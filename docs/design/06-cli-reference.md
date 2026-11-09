@@ -612,6 +612,21 @@ ot config list --show-origin
 
 ---
 
+## ot schema
+
+Export JSON Schema (Draft 2020-12) definitions for Open Tasks configuration (`config`), WorkItems (`work-item`), Meetings (`meeting`), or a bundle of all schemas (`all`).
+
+Example:
+
+```bash
+ot schema
+ot schema work-item
+ot schema all --output schemas/
+ot config schema
+```
+
+---
+
 # Version Commands
 
 ## ot version

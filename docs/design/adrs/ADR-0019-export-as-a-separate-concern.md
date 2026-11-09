@@ -67,5 +67,5 @@ Negative:
 
 ## Amendments (As-Built)
 
-- **Built-in JSON CLI Output**: In addition to storing open Markdown/YAML files on disk, `ot task list --json` and `ot check --json` emit structured JSON directly from the CLI (`src/ot/cli.py`) so external reporting scripts, dashboards, and CI pipelines can consume Open Tasks data without writing custom Markdown parsers. Formal JSON Schema definitions and export tooling are tracked under Epic `474111` (*Export and Reporting Tooling*) and Task `d2c34f` (*JSON Schema Export*).
+- **Built-in JSON CLI Output & JSON Schema Export (`src/ot/cli.py`, `src/ot/schema.py`)**: In addition to storing open Markdown/YAML files on disk, `ot task list --json`, `ot meeting list --json`, `ot attachment list --json`, `ot config list --json`, and `ot check --json` emit structured JSON directly from the CLI, and `ot schema [all|config|work-item|meeting] [--output <path>]` (plus `ot config schema`) generates JSON Schema Draft 2020-12 definitions dynamically tailored to the project's configured types, statuses, and sizes (Epic `474111`, Task `d2c34f`).
 

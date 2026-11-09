@@ -1248,6 +1248,36 @@ def cmd_attachment_show(args: argparse.Namespace, config: Config) -> int:
     return 0
 
 
+def cmd_schema(args: argparse.Namespace, config: Config) -> int:
+    """Export JSON Schema definitions for Open Tasks."""
+    from ot.schema import generate_all_schemas, get_schema
+
+    target = getattr(args, "target", None) or "all"
+    try:
+        schema_doc = get_schema(target, config)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    output_arg = getattr(args, "output", None)
+    if output_arg:
+        out_path = Path(output_arg).expanduser()
+        if target.lower() == "all" and (out_path.is_dir() or str(output_arg).endswith("/")):
+            out_path.mkdir(parents=True, exist_ok=True)
+            for name, doc in generate_all_schemas(config).items():
+                dest = out_path / f"{name}.schema.json"
+                dest.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+            print(f"Exported JSON schemas to {out_path}")
+        else:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(json.dumps(schema_doc, indent=2) + "\n", encoding="utf-8")
+            print(f"Exported '{target}' JSON schema to {out_path}")
+        return 0
+
+    print(json.dumps(schema_doc, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     from ot import __version__
     parser = argparse.ArgumentParser(prog="ot", description="Open Tasks (ot) CLI")
@@ -1319,6 +1349,26 @@ def build_parser() -> argparse.ArgumentParser:
     cfg_list_p = config_sub.add_parser("list", help="List resolved configuration values")
     cfg_list_p.add_argument("--show-origin", action="store_true", help="Show origin layer for each key")
     cfg_list_p.add_argument("--json", action="store_true", help="Output in JSON format")
+
+    cfg_schema_p = config_sub.add_parser("schema", help="Export configuration JSON Schema")
+    cfg_schema_p.add_argument("--output", "-o", help="Optional output file path")
+
+    # ot schema ...
+    schema_parser = subparsers.add_parser(
+        "schema",
+        help="Export JSON Schema definitions (config, work-item, meeting, or all)",
+    )
+    schema_parser.add_argument(
+        "target",
+        nargs="?",
+        default="all",
+        help="Schema target to export: all, config, work-item, or meeting (default: all)",
+    )
+    schema_parser.add_argument(
+        "--output",
+        "-o",
+        help="Optional output file or directory path",
+    )
 
     # ot meeting ...
     meeting_parser = subparsers.add_parser("meeting", help="Planning meeting workflows")
@@ -1525,9 +1575,15 @@ def main(args: Optional[List[str]] = None) -> int:
             return cmd_config_set(parsed, config)
         elif parsed.command == "list":
             return cmd_config_list(parsed, config)
+        elif parsed.command == "schema":
+            parsed.target = "config"
+            return cmd_schema(parsed, config)
         else:
             parser.print_help()
             return 1
+
+    if parsed.category == "schema":
+        return cmd_schema(parsed, config)
 
     if parsed.category == "meeting":
         if parsed.command == "start":

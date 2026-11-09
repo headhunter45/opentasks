@@ -590,6 +590,45 @@ class TestCLICommands(unittest.TestCase):
             img_file.unlink(missing_ok=True)
             doc_file.unlink(missing_ok=True)
 
+    def test_cli_schema_export(self):
+        # 1. Export all schemas as a JSON bundle to stdout
+        out_all = io.StringIO()
+        with redirect_stdout(out_all):
+            ret_all = main(["-C", str(self.root), "schema"])
+        self.assertEqual(ret_all, 0)
+        bundle = json.loads(out_all.getvalue())
+        self.assertEqual(bundle["$schema"], "https://json-schema.org/draft/2020-12/schema")
+        self.assertIn("config", bundle["$defs"])
+        self.assertIn("work-item", bundle["$defs"])
+        self.assertIn("meeting", bundle["$defs"])
+
+        # 2. Export work-item schema and verify enum values reflect project configuration
+        out_wi = io.StringIO()
+        with redirect_stdout(out_wi):
+            ret_wi = main(["-C", str(self.root), "schema", "work-item"])
+        self.assertEqual(ret_wi, 0)
+        wi_schema = json.loads(out_wi.getvalue())
+        self.assertIn("task", wi_schema["properties"]["type"]["enum"])
+        self.assertIn("triage", wi_schema["properties"]["status"]["enum"])
+
+        # 3. Export config schema via `ot config schema`
+        out_cfg = io.StringIO()
+        with redirect_stdout(out_cfg):
+            ret_cfg = main(["-C", str(self.root), "config", "schema"])
+        self.assertEqual(ret_cfg, 0)
+        cfg_schema = json.loads(out_cfg.getvalue())
+        self.assertEqual(cfg_schema["title"], "Open Tasks Configuration")
+
+        # 4. Export all schemas into a directory
+        schema_dir = self.root / "exported_schemas"
+        out_dir = io.StringIO()
+        with redirect_stdout(out_dir):
+            ret_dir = main(["-C", str(self.root), "schema", "all", "--output", f"{schema_dir}/"])
+        self.assertEqual(ret_dir, 0)
+        self.assertTrue((schema_dir / "config.schema.json").is_file())
+        self.assertTrue((schema_dir / "work-item.schema.json").is_file())
+        self.assertTrue((schema_dir / "meeting.schema.json").is_file())
+
 
 if __name__ == "__main__":
     unittest.main()
