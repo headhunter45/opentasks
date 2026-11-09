@@ -73,6 +73,47 @@ class TestProjectDiscovery(unittest.TestCase):
         editor = get_system_editor()
         self.assertIsNotNone(editor)
 
+    def test_hg_discovery_and_identity_resolution(self):
+        from ot.config import load_config
+        from ot.discovery import (
+            find_vcs_root,
+            get_hg_editor,
+            get_hg_identity,
+            parse_hg_username,
+        )
+
+        self.assertEqual(
+            parse_hg_username("Grace Hopper <grace@navy.mil>"),
+            ("Grace Hopper", "grace@navy.mil"),
+        )
+        self.assertEqual(parse_hg_username("Grace Hopper"), ("Grace Hopper", None))
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            (root / ".ot").mkdir()
+            hg_dir = root / ".hg"
+            hg_dir.mkdir()
+            (hg_dir / "hgrc").write_text(
+                "[ui]\nusername = Ada Lovelace <ada@analytical.engine>\neditor = emacs\n",
+                encoding="utf-8",
+            )
+
+            vcs_type, vcs_root = find_vcs_root(root)
+            self.assertEqual(vcs_type, "hg")
+            self.assertEqual(vcs_root, root)
+
+            name, email = get_hg_identity(root)
+            self.assertEqual(name, "Ada Lovelace")
+            self.assertEqual(email, "ada@analytical.engine")
+            self.assertEqual(get_hg_editor(root), "emacs")
+
+            cfg = load_config(root)
+            self.assertEqual(cfg.user_name, "Ada Lovelace")
+            self.assertEqual(cfg.user_email, "ada@analytical.engine")
+            self.assertEqual(cfg.editor, "emacs")
+            self.assertEqual(cfg.get_origin("user.name"), "vcs (hg)")
+            self.assertEqual(cfg.get_origin("user.editor"), "vcs (hg)")
+
 
 
 

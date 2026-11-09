@@ -113,6 +113,76 @@ def get_git_editor(repo_dir: Optional[Path | str] = None) -> Optional[str]:
     return get_git_config("core.editor", repo_dir)
 
 
+@functools.lru_cache(maxsize=4)
+def is_hg_available() -> bool:
+    """Check if hg (Mercurial) binary is available on PATH."""
+    try:
+        res = subprocess.run(["hg", "--version"], capture_output=True, text=True)
+        return res.returncode == 0
+    except Exception:
+        return False
+
+
+def parse_hg_username(raw_username: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+    """Parse Mercurial ui.username ('Name <email@domain>' or 'Name') into (name, email)."""
+    if not raw_username or not raw_username.strip():
+        return None, None
+    import re
+
+    val = raw_username.strip()
+    m = re.match(r"^([^<]*?)<([^>]+)>\s*$", val)
+    if m:
+        name = m.group(1).strip() or None
+        email = m.group(2).strip() or None
+        return name, email
+    return val, None
+
+
+def get_hg_config(key: str, repo_dir: Optional[Path | str] = None) -> Optional[str]:
+    """Query Mercurial configuration for a specific key (e.g. 'ui.username', 'ui.editor')."""
+    if is_hg_available():
+        try:
+            cmd = ["hg", "config", key]
+            cwd = str(repo_dir) if repo_dir else None
+            res = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=False)
+            if res.returncode == 0:
+                val = res.stdout.strip()
+                if val:
+                    return val
+        except Exception:
+            pass
+
+    # Fallback: check local .hg/hgrc if repo_dir is inside a Mercurial repository
+    if repo_dir and "." in key:
+        section, option = key.split(".", 1)
+        vcs_type, vcs_root = find_vcs_root(repo_dir)
+        if vcs_type == "hg" and vcs_root:
+            hgrc = vcs_root / ".hg" / "hgrc"
+            if hgrc.is_file():
+                try:
+                    import configparser
+
+                    cp = configparser.ConfigParser()
+                    cp.read(hgrc, encoding="utf-8")
+                    if cp.has_option(section, option):
+                        val = cp.get(section, option).strip()
+                        return val if val else None
+                except Exception:
+                    pass
+    return None
+
+
+def get_hg_identity(repo_dir: Optional[Path | str] = None) -> Tuple[Optional[str], Optional[str]]:
+    """Get (name, email) from Mercurial configuration (ui.username)."""
+    raw = get_hg_config("ui.username", repo_dir)
+    return parse_hg_username(raw)
+
+
+def get_hg_editor(repo_dir: Optional[Path | str] = None) -> Optional[str]:
+    """Get preferred editor from Mercurial configuration (ui.editor)."""
+    return get_hg_config("ui.editor", repo_dir)
+
+
 def get_system_identity() -> Tuple[Optional[str], Optional[str]]:
     """Get identity fallback when no VCS is present or configured.
 

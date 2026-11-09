@@ -9,8 +9,11 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ot.discovery import (
     find_project_root,
+    find_vcs_root,
     get_git_editor,
     get_git_identity,
+    get_hg_editor,
+    get_hg_identity,
     get_system_editor,
     get_system_identity,
 )
@@ -477,30 +480,61 @@ def load_config(start_dir: Optional[Path | str] = None) -> Config:
 
     # 5. VCS & Environment fallbacks for user identity and editor
     user_dict = resolved.setdefault("user", {})
+    vcs_type, _ = find_vcs_root(project_root)
+
     if not user_dict.get("name") or not user_dict.get("email"):
-        git_name, git_email = get_git_identity(project_root)
+        if vcs_type == "hg":
+            hg_name, hg_email = get_hg_identity(project_root)
+            git_name, git_email = (None, None) if (hg_name and hg_email) else get_git_identity(project_root)
+            primary_name, primary_email, primary_origin = hg_name, hg_email, "vcs (hg)"
+            secondary_name, secondary_email, secondary_origin = git_name, git_email, "vcs (git)"
+        else:
+            git_name, git_email = get_git_identity(project_root)
+            hg_name, hg_email = (None, None) if (git_name and git_email) else get_hg_identity(project_root)
+            primary_name, primary_email, primary_origin = git_name, git_email, "vcs (git)"
+            secondary_name, secondary_email, secondary_origin = hg_name, hg_email, "vcs (hg)"
+
         sys_name, sys_email = get_system_identity()
         if not user_dict.get("name"):
-            if git_name:
-                user_dict["name"] = git_name
-                origins["user.name"] = "vcs (git)"
+            if primary_name:
+                user_dict["name"] = primary_name
+                origins["user.name"] = primary_origin
+            elif secondary_name:
+                user_dict["name"] = secondary_name
+                origins["user.name"] = secondary_origin
             else:
                 user_dict["name"] = sys_name
                 origins["user.name"] = "environment"
         if not user_dict.get("email"):
-            if git_email:
-                user_dict["email"] = git_email
-                origins["user.email"] = "vcs (git)"
+            if primary_email:
+                user_dict["email"] = primary_email
+                origins["user.email"] = primary_origin
+            elif secondary_email:
+                user_dict["email"] = secondary_email
+                origins["user.email"] = secondary_origin
             else:
                 user_dict["email"] = sys_email
                 origins["user.email"] = "environment"
 
     if not user_dict.get("editor"):
-        git_editor = get_git_editor(project_root)
+        if vcs_type == "hg":
+            hg_editor = get_hg_editor(project_root)
+            git_editor = None if hg_editor else get_git_editor(project_root)
+            primary_ed, primary_ed_origin = hg_editor, "vcs (hg)"
+            secondary_ed, secondary_ed_origin = git_editor, "vcs (git)"
+        else:
+            git_editor = get_git_editor(project_root)
+            hg_editor = None if git_editor else get_hg_editor(project_root)
+            primary_ed, primary_ed_origin = git_editor, "vcs (git)"
+            secondary_ed, secondary_ed_origin = hg_editor, "vcs (hg)"
+
         sys_editor = get_system_editor()
-        if git_editor:
-            user_dict["editor"] = git_editor
-            origins["user.editor"] = "vcs (git)"
+        if primary_ed:
+            user_dict["editor"] = primary_ed
+            origins["user.editor"] = primary_ed_origin
+        elif secondary_ed:
+            user_dict["editor"] = secondary_ed
+            origins["user.editor"] = secondary_ed_origin
         else:
             user_dict["editor"] = sys_editor
             origins["user.editor"] = "environment"
