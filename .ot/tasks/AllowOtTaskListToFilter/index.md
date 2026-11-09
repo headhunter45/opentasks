@@ -1,23 +1,25 @@
 ---
 id: 229d60f7-d0ed-40a0-a917-b6ab030f3c61
 title: Allow `ot task list` to filter by more frontmatter values.
-type: task
-status: triage
+type: feature
+status: planned
+size: medium
 created_at: 2026-10-22T01:56:12.274345+00:00
-updated_at: 2026-10-22T02:01:24.036797+00:00
+updated_at: 2026-11-09T07:31:00+00:00
 author:
   name: Tom Hicks
   email: headhunter3@gmail.com
+dependencies:
+  - 98426040-3a5a-4f78-8232-9da6262ec6a9
 ---
 
 # Allow `ot task list` to filter by more frontmatter values.
 
 ## Overview
+All of these fields should be supported on `ot task list` with their own flag (supporting multi-value and comma-separated matching per `984260`):
 
-all of these need to be treated like --status with their own flag to search
-
-id: Match values if they match starts with or equals the value
-title: Match values if they match starts with or equals the value
-type: Match values if they match starts with or equals the value. If a value does not match then error and list the allowed types.
-status: Match values if they match starts with or equals the value. If a value does not match then error and list the allowed types.
-author: Match values against name and/or email as a regex if it begins with `/` and ends with `/` otherwise treat it as a value is anywher in the string.
+- `--id`: Match values if they start with or equal the filter value (case-insensitive).
+- `--title`: Match values if they start with or equal the filter value (case-insensitive).
+- `--type` / `-t`: Match values if they start with or equal an allowed type. If a value does not match any allowed type, print an error listing the allowed types and exit non-zero.
+- `--status` / `-s`: Match values if they start with or equal an allowed status. If a value does not match any allowed status, print an error listing the allowed statuses and exit non-zero.
+- `--author`: Match values against `author.name` and/or `author.email` as a regex if the filter value begins with `/` and ends with `/`; otherwise match if the value appears anywhere in `name` or `email` (case-insensitive).
