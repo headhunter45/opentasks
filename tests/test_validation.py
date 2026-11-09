@@ -252,6 +252,78 @@ class TestValidationAndRepair(unittest.TestCase):
         self.assertTrue(any("Broken relative Markdown link 'missing-spec.md'" in m for m in msgs2))
         self.assertFalse(any("https://example.com/spec" in m for m in msgs2))
 
+    def test_dvcs_safety_checks_and_conflict_markers(self):
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+
+        # 1. Simulate active Git merge (.git/MERGE_HEAD)
+        git_dir = self.root / ".git"
+        git_dir.mkdir(exist_ok=True)
+        merge_head = git_dir / "MERGE_HEAD"
+        merge_head.write_text("deadbeef\n", encoding="utf-8")
+
+        # Read-only command succeeds
+        out_ro = io.StringIO()
+        with redirect_stdout(out_ro):
+            ret_ro = main(["-C", str(self.root), "task", "list"])
+        self.assertEqual(ret_ro, 0)
+
+        # Mutating command is blocked without --force
+        out_mut = io.StringIO()
+        err_mut = io.StringIO()
+        with redirect_stdout(out_mut), redirect_stderr(err_mut):
+            ret_mut = main(["-C", str(self.root), "task", "status", "Setup Continuous Integration Pipeline", "completed"])
+        self.assertEqual(ret_mut, 1)
+        self.assertIn("unsafe VCS state", err_mut.getvalue())
+
+        # Mutating command succeeds with --force
+        out_force = io.StringIO()
+        with redirect_stdout(out_force):
+            ret_force = main([
+                "-C",
+                str(self.root),
+                "task",
+                "status",
+                "Setup Continuous Integration Pipeline",
+                "completed",
+                "--force",
+            ])
+        self.assertEqual(ret_force, 0)
+
+        # Validator reports vcs diagnostic
+        v_git = Validator(self.root)
+        diags_git = v_git.validate_all()
+        self.assertTrue(any(d.category == "vcs" and "MERGE_HEAD" in d.message for d in diags_git))
+        shutil.rmtree(git_dir, ignore_errors=True)
+
+        # 2. Simulate active Mercurial rebase (.hg/rebasestate)
+        hg_dir = self.root / ".hg"
+        hg_dir.mkdir(exist_ok=True)
+        (hg_dir / "rebasestate").write_text("state\n", encoding="utf-8")
+        err_hg = io.StringIO()
+        with redirect_stderr(err_hg):
+            ret_hg = main(["-C", str(self.root), "task", "create", "Blocked By Hg Rebase", "--no-edit"])
+        self.assertEqual(ret_hg, 1)
+        self.assertIn(".hg/rebasestate", err_hg.getvalue())
+        shutil.rmtree(hg_dir, ignore_errors=True)
+
+        # 3. Conflict markers in config, templates, and meetings
+        marker_start = "<" * 7 + " HEAD"
+        marker_end = ">" * 7 + " branch"
+        tpl_dir = self.root / ".ot" / "templates" / "tasks"
+        tpl_dir.mkdir(parents=True, exist_ok=True)
+        (tpl_dir / "conflict.md").write_text(f"# Title\n{marker_start}\nA\n{marker_end}\n", encoding="utf-8")
+
+        mtg_dir = self.root / ".ot" / "meetings"
+        mtg_dir.mkdir(parents=True, exist_ok=True)
+        (mtg_dir / "conflict_mtg.md").write_text(f"# Mtg\n{marker_start}\nB\n{marker_end}\n", encoding="utf-8")
+
+        v_conflict = Validator(self.root)
+        c_diags = v_conflict.validate_all()
+        conflict_msgs = [d.message for d in c_diags if d.category == "merge_conflict"]
+        self.assertTrue(any("template conflict.md" in m for m in conflict_msgs))
+        self.assertTrue(any("meeting conflict_mtg.md" in m for m in conflict_msgs))
+
 
 if __name__ == "__main__":
     unittest.main()

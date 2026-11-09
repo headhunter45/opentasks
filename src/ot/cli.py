@@ -13,7 +13,7 @@ import tempfile
 from typing import List, Optional
 
 from ot.config import Config, get_flattened_keys, load_config, set_config_key
-from ot.discovery import discover_root, find_project_root
+from ot.discovery import check_vcs_safety, discover_root, find_project_root
 from ot.identifiers import generate_uuid
 from ot.models import Author, Comment, WorkItem, WorkItemMetadata, now_iso
 from ot.parser import parse_work_item_content, read_work_item, render_work_item, write_work_item
@@ -864,6 +864,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override output width in columns",
     )
     parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Proceed with write operations even when the repository is in an unsafe VCS state",
+    )
+    parser.add_argument(
         "--version",
         "-V",
         action="version",
@@ -988,7 +993,54 @@ def build_parser() -> argparse.ArgumentParser:
     get_dep_p = task_sub.add_parser("get-dependencies", help="Get work item dependencies")
     get_dep_p.add_argument("id", help="WorkItem ID or short ID")
 
+    # Allow --force after mutating subcommands as well
+    for mut_p in (
+        init_parser,
+        upgrade_parser,
+        check_parser,
+        cfg_set_p,
+        create_p,
+        edit_p,
+        update_p,
+        status_p,
+        comment_p,
+        add_dep_p,
+        rm_dep_p,
+    ):
+        mut_p.add_argument(
+            "--force",
+            action="store_true",
+            default=argparse.SUPPRESS,
+            help="Proceed with write operations even when the repository is in an unsafe VCS state",
+        )
+
     return parser
+
+
+def _is_mutating_command(parsed: argparse.Namespace) -> bool:
+    cat = parsed.category
+    cmd = getattr(parsed, "command", None)
+    if cat in ("init", "upgrade"):
+        return True
+    if cat == "check" and getattr(parsed, "fix", False):
+        return True
+    if cat == "config" and cmd == "set":
+        return True
+    if cat == "task" and cmd in (
+        "create",
+        "edit",
+        "update",
+        "status",
+        "comment",
+        "add-dependency",
+        "remove-dependency",
+    ):
+        return True
+    if cat == "meeting" and cmd in ("start", "end"):
+        return True
+    if cat == "attachment" and cmd in ("add", "remove"):
+        return True
+    return False
 
 
 def main(args: Optional[List[str]] = None) -> int:
@@ -1000,6 +1052,16 @@ def main(args: Optional[List[str]] = None) -> int:
         return 0
 
     config = load_config(parsed.project_dir)
+
+    if _is_mutating_command(parsed) and not getattr(parsed, "force", False):
+        if parsed.category == "init":
+            check_dir = Path(getattr(parsed, "directory", ".")).resolve()
+        else:
+            check_dir = config.project_root or Path(parsed.project_dir or ".").resolve()
+        is_safe, reason = check_vcs_safety(check_dir)
+        if not is_safe:
+            print(f"Error: {reason}", file=sys.stderr)
+            return 1
 
     if parsed.category == "version":
         return cmd_version(parsed, config)

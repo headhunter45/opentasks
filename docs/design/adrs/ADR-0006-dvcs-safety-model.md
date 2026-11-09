@@ -81,9 +81,9 @@ Negative:
 
 ## Amendments (As-Built)
 
-- **Current Implementation**:
-  - `src/ot/parser.py` (`write_work_item`) writes work item changes atomically via a temporary file in the target directory followed by `os.replace`.
-  - `src/ot/validation.py` (`Validator.validate_work_items`) detects unresolved Git/VCS merge conflict markers (`<<<<<<<` and `>>>>>>>`) in work item files during `ot check`.
-- **Deferred / Partial Scope**:
-  - Pre-write repository state inspection (blocking mutating CLI commands when `.git/MERGE_HEAD`, `rebase-merge`, `rebase-apply`, `CHERRY_PICK_HEAD`, or lock files are present, and extending merge conflict marker checks to configuration, meeting, and template files) is not yet enforced before write operations and is tracked in task `143b5e`.
+- **Implemented DVCS Safety & Conflict Detection (`src/ot/discovery.py`, `src/ot/cli.py`, `src/ot/validation.py`, `src/ot/parser.py`)**:
+  - `check_vcs_safety()` inspects Git (`.git/MERGE_HEAD`, `rebase-merge`, `rebase-apply`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `BISECT_LOG`, `index.lock`) and Mercurial (`.hg/merge`, `rebasestate`, `histedit-state`, `wlock`) state before any mutating CLI command (`init`, `upgrade`, `check --fix`, `config set`, `task create/edit/update/status/comment/add-dependency/remove-dependency`, `meeting start/end`, `attachment add/remove`), blocking write operations with exit code `1` unless `--force` is passed while allowing read-only commands (`task list`, `task show`, `check`, `version`, `config get/list`, etc.) (task `143b5e`).
+  - `write_work_item` writes work item changes atomically via a temporary file in the target directory followed by `os.replace`.
+  - `Validator` reports active unsafe VCS states (`category="vcs"`) and scans WorkItems, `.ot/config.json`, `.ot/config.local.json`, templates, and meetings for unresolved merge conflict marker lines (`category="merge_conflict"`, `Severity.ERROR`).
+
 

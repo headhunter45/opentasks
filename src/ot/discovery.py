@@ -183,6 +183,53 @@ def get_hg_editor(repo_dir: Optional[Path | str] = None) -> Optional[str]:
     return get_hg_config("ui.editor", repo_dir)
 
 
+def check_vcs_safety(start_dir: Optional[Path | str] = None) -> Tuple[bool, Optional[str]]:
+    """Inspect the containing Git or Mercurial repository for active unsafe states.
+
+    Returns (is_safe, reason_if_unsafe).
+    """
+    vcs_type, vcs_root = find_vcs_root(start_dir)
+    if not vcs_root:
+        return True, None
+
+    if vcs_type == "git":
+        git_dir = vcs_root / ".git"
+        if git_dir.is_dir():
+            git_unsafe_markers = [
+                ("MERGE_HEAD", "Git merge in progress (.git/MERGE_HEAD)"),
+                ("rebase-merge", "Git rebase in progress (.git/rebase-merge)"),
+                ("rebase-apply", "Git rebase/am in progress (.git/rebase-apply)"),
+                ("CHERRY_PICK_HEAD", "Git cherry-pick in progress (.git/CHERRY_PICK_HEAD)"),
+                ("REVERT_HEAD", "Git revert in progress (.git/REVERT_HEAD)"),
+                ("BISECT_LOG", "Git bisect in progress (.git/BISECT_LOG)"),
+                ("index.lock", "Active Git lock file present (.git/index.lock)"),
+            ]
+            for marker, desc in git_unsafe_markers:
+                if (git_dir / marker).exists():
+                    return (
+                        False,
+                        f"Repository is in an unsafe VCS state: {desc}. Complete or abort the VCS operation, or pass --force.",
+                    )
+
+    elif vcs_type == "hg":
+        hg_dir = vcs_root / ".hg"
+        if hg_dir.is_dir():
+            hg_unsafe_markers = [
+                ("merge", "Mercurial merge in progress (.hg/merge)"),
+                ("rebasestate", "Mercurial rebase in progress (.hg/rebasestate)"),
+                ("histedit-state", "Mercurial histedit in progress (.hg/histedit-state)"),
+                ("wlock", "Active Mercurial working-directory lock present (.hg/wlock)"),
+            ]
+            for marker, desc in hg_unsafe_markers:
+                if (hg_dir / marker).exists():
+                    return (
+                        False,
+                        f"Repository is in an unsafe VCS state: {desc}. Complete or abort the VCS operation, or pass --force.",
+                    )
+
+    return True, None
+
+
 def get_system_identity() -> Tuple[Optional[str], Optional[str]]:
     """Get identity fallback when no VCS is present or configured.
 

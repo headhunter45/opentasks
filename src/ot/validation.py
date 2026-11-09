@@ -20,7 +20,7 @@ from ot.config import (
     load_json_file,
     relocate_protected_keys,
 )
-from ot.discovery import find_project_root
+from ot.discovery import check_vcs_safety, find_project_root
 from ot.identifiers import is_valid_uuid
 from ot.models import WorkItem
 from ot.parser import read_work_item, write_work_item
@@ -31,6 +31,11 @@ class Severity(str, Enum):
     ERROR = "ERROR"
     WARNING = "WARNING"
     INFO = "INFO"
+
+
+def has_conflict_markers(content: str) -> bool:
+    """Return True if `content` contains unresolved Git/Mercurial conflict marker lines."""
+    return bool(re.search(r"^(?:<{7}|={7}|>{7})(?:\s|$)", content, flags=re.MULTILINE))
 
 
 @dataclass
@@ -82,9 +87,28 @@ class Validator:
             )
             return diagnostics
 
+        diagnostics.extend(self.validate_vcs_safety())
         diagnostics.extend(self.validate_filesystem())
         diagnostics.extend(self.validate_configuration())
         diagnostics.extend(self.validate_work_items())
+        return diagnostics
+
+    def validate_vcs_safety(self) -> List[Diagnostic]:
+        """Check whether the repository is currently in an unsafe DVCS state."""
+        diagnostics: List[Diagnostic] = []
+        if not self.project_root:
+            return diagnostics
+        is_safe, reason = check_vcs_safety(self.project_root)
+        if not is_safe and reason:
+            diagnostics.append(
+                Diagnostic(
+                    severity=Severity.WARNING,
+                    category="vcs",
+                    message=reason,
+                    file_path=self.project_root,
+                    is_fixable=False,
+                )
+            )
         return diagnostics
 
     def validate_filesystem(self) -> List[Diagnostic]:
@@ -197,6 +221,20 @@ class Validator:
         local_cfg_path = self.project_root / ".ot" / "config.local.json"
         if local_cfg_path.is_file():
             try:
+                raw_local = local_cfg_path.read_text(encoding="utf-8")
+                if has_conflict_markers(raw_local):
+                    diagnostics.append(
+                        Diagnostic(
+                            severity=Severity.ERROR,
+                            category="merge_conflict",
+                            message=f"Unresolved merge conflict markers found in {local_cfg_path.name}",
+                            file_path=local_cfg_path,
+                            is_fixable=False,
+                        )
+                    )
+            except Exception:
+                pass
+            try:
                 local_data = load_json_file(local_cfg_path)
                 local_schema = local_data.get("system", {}).get("configSchemaVersion")
                 if local_schema is not None:
@@ -237,6 +275,20 @@ class Validator:
         # 3. Canonical project configuration (.ot/config.json)
         proj_cfg_path = self.project_root / ".ot" / "config.json"
         if proj_cfg_path.is_file():
+            try:
+                raw_proj = proj_cfg_path.read_text(encoding="utf-8")
+                if has_conflict_markers(raw_proj):
+                    diagnostics.append(
+                        Diagnostic(
+                            severity=Severity.ERROR,
+                            category="merge_conflict",
+                            message=f"Unresolved merge conflict markers found in {proj_cfg_path.name}",
+                            file_path=proj_cfg_path,
+                            is_fixable=False,
+                        )
+                    )
+            except Exception:
+                pass
             try:
                 proj_data = load_json_file(proj_cfg_path)
                 schema_version = proj_data.get("system", {}).get("configSchemaVersion")
@@ -551,7 +603,7 @@ class Validator:
             if item.path and item.path.is_file():
                 try:
                     content = item.path.read_text(encoding="utf-8")
-                    if "<<<<<<<" in content or ">>>>>>>" in content:
+                    if has_conflict_markers(content):
                         diagnostics.append(
                             Diagnostic(
                                 severity=Severity.ERROR,
@@ -737,7 +789,7 @@ class Validator:
                     )
                 )
 
-        # Also validate relative Markdown links in meetings if present
+        # Also validate relative Markdown links and conflict markers in meetings and templates if present
         meetings_dir = self.config.meetings_dir if self.config else (self.project_root / ".ot" / "meetings")
         if meetings_dir.is_dir():
             for mtg_file in sorted(meetings_dir.rglob("*.md")):
@@ -745,11 +797,39 @@ class Validator:
                     continue
                 try:
                     mtg_text = mtg_file.read_text(encoding="utf-8")
+                    if has_conflict_markers(mtg_text):
+                        diagnostics.append(
+                            Diagnostic(
+                                severity=Severity.ERROR,
+                                category="merge_conflict",
+                                message=f"Unresolved merge conflict markers found in meeting {mtg_file.name}",
+                                file_path=mtg_file,
+                                is_fixable=False,
+                            )
+                        )
                     diagnostics.extend(
                         self._validate_markdown_links_in_text(
                             mtg_text, mtg_file, category="meeting"
                         )
                     )
+                except Exception:
+                    pass
+
+        templates_dir = self.config.templates_dir if self.config else (self.project_root / ".ot" / "templates")
+        if templates_dir.is_dir():
+            for tpl_file in sorted(templates_dir.rglob("*.md")):
+                try:
+                    tpl_text = tpl_file.read_text(encoding="utf-8")
+                    if has_conflict_markers(tpl_text):
+                        diagnostics.append(
+                            Diagnostic(
+                                severity=Severity.ERROR,
+                                category="merge_conflict",
+                                message=f"Unresolved merge conflict markers found in template {tpl_file.name}",
+                                file_path=tpl_file,
+                                is_fixable=False,
+                            )
+                        )
                 except Exception:
                     pass
 

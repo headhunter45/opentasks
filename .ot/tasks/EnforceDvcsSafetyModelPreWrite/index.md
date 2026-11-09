@@ -2,10 +2,10 @@
 id: 143b5ec1-3947-43b6-bd02-fb2c206e2176
 title: Enforce DVCS safety model pre-write checks and expand merge conflict validation
 type: feature
-status: planned
+status: completed
 size: medium
 created_at: 2026-11-09T17:55:06.739402+00:00
-updated_at: 2026-11-09T19:32:00.000000+00:00
+updated_at: 2026-11-09T21:12:27.927120+00:00
 author:
   name: Tom Hicks
   email: headhunter3@gmail.com
@@ -23,3 +23,9 @@ Implement ADR-0006 DVCS safety checks to block mutating CLI operations when the 
 - [ ] Extend `Validator` in `src/ot/validation.py` to report a `vcs` diagnostic when in an unsafe VCS state and scan `.ot/config.json`, `.ot/config.local.json`, templates, and meetings for unresolved Git/Hg conflict marker lines.
 - [ ] Add unit tests for Git/Hg unsafe states, `--force` bypass, and conflict marker detection across config/templates/meetings.
 
+## Comments
+
+### Comment by Tom Hicks <headhunter3@gmail.com> on 2026-11-09T21:12:27.446285+00:00
+<!-- comment-id: 0cce52ce-2bbb-43c6-a8bc-348ebacc7549 -->
+
+Added check_vcs_safety for Git and Mercurial, enforced pre-write DVCS safety checks across mutating CLI commands (with --force bypass), and expanded conflict marker validation to config, templates, and meetings.
