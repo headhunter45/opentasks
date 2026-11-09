@@ -49,6 +49,48 @@ class TestGlobalLauncher(unittest.TestCase):
         ret = run_launcher(["task", "list"], start_dir=self.root)
         self.assertEqual(ret, 0)
 
+    def test_packaged_global_zipapp_delegates_to_project_zipapp(self):
+        """Regression: global `ot` packaged as a .zipapp must invoke run_launcher
+        and delegate to the project's .ot/bin/ zipapp without infinite recursion.
+        """
+        import os
+        import subprocess
+        import sys
+
+        src_dir = Path(__file__).resolve().parent.parent / "src"
+        global_bin = self.root / "global-bin" / "ot"
+        build_zipapp_artifact(src_dir, global_bin, "0.1.0")
+
+        proj_bin = self.root / ".ot" / "bin" / "ot.zipapp"
+        build_zipapp_artifact(src_dir, proj_bin, "0.1.1")
+
+        env = dict(os.environ)
+        env.pop("PYTHONPATH", None)
+
+        res = subprocess.run(
+            [sys.executable, str(global_bin), "task", "list"],
+            cwd=str(self.root),
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        self.assertEqual(
+            res.returncode,
+            0,
+            f"global zipapp failed:\nSTDOUT: {res.stdout}\nSTDERR: {res.stderr}",
+        )
+        self.assertIn("ID", res.stdout)
+
+        # Direct execution of the project zipapp must also succeed without recursion
+        res_direct = subprocess.run(
+            [sys.executable, str(proj_bin), "task", "list"],
+            cwd=str(self.root),
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        self.assertEqual(res_direct.returncode, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

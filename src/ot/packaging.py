@@ -58,7 +58,7 @@ def build_zipapp_artifact(
     src_dir: Path | str,
     output_path: Path | str,
     version: str,
-    main_func: str = "ot.cli:main",
+    main_func: str = "ot.launcher:run_launcher",
 ) -> ReleaseManifest:
     """Package the `ot` source into a self-contained executable ZipApp (.zipapp).
 
@@ -99,9 +99,10 @@ def build_zipapp_artifact(
             init_py.write_text(content, encoding="utf-8")
 
         # Create __main__.py entry point
+        mod_name, func_name = main_func.split(":", 1)
         main_py = staging / "__main__.py"
         main_py.write_text(
-            'import sys\nfrom ot.cli import main\n\nif __name__ == "__main__":\n    sys.exit(main())\n',
+            f'import sys\nfrom {mod_name} import {func_name}\n\nif __name__ == "__main__":\n    sys.exit({func_name}())\n',
             encoding="utf-8",
         )
 
