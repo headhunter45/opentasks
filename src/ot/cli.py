@@ -12,7 +12,7 @@ import sys
 import tempfile
 from typing import List, Optional
 
-from ot.config import Config, load_config
+from ot.config import Config, get_flattened_keys, load_config, set_config_key
 from ot.discovery import discover_root, find_project_root
 from ot.identifiers import generate_uuid
 from ot.models import Author, Comment, WorkItem, WorkItemMetadata, now_iso
@@ -770,6 +770,85 @@ def cmd_version(args: argparse.Namespace, config: Config) -> int:
     return 0
 
 
+def _format_config_val(val: object) -> str:
+    if isinstance(val, (dict, list)):
+        return json.dumps(val)
+    if val is None:
+        return "null"
+    if isinstance(val, bool):
+        return "true" if val else "false"
+    return str(val)
+
+
+def cmd_config_get(args: argparse.Namespace, config: Config) -> int:
+    """Retrieve a resolved configuration key."""
+    flat_keys = get_flattened_keys(config.raw)
+    if args.key not in flat_keys:
+        print(f"Error: Configuration key '{args.key}' not found.", file=sys.stderr)
+        return 1
+
+    val = config.get(args.key)
+    formatted = _format_config_val(val)
+    if getattr(args, "show_origin", False):
+        origin = config.get_origin(args.key)
+        print(f"{origin}\t{formatted}")
+    else:
+        print(formatted)
+    return 0
+
+
+def cmd_config_set(args: argparse.Namespace, config: Config) -> int:
+    """Set a configuration key in local, project, or global config."""
+    scope: Optional[str] = None
+    if getattr(args, "local", False):
+        scope = "local"
+    elif getattr(args, "project", False):
+        scope = "project"
+    elif getattr(args, "global_scope", False):
+        scope = "global"
+
+    try:
+        target_path, parsed_val, warning = set_config_key(
+            config.project_root,
+            args.key,
+            args.value,
+            scope=scope,
+        )
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    if warning:
+        print(warning, file=sys.stderr)
+
+    print(f"Set '{args.key}' = {_format_config_val(parsed_val)} in {target_path.name}")
+    return 0
+
+
+def cmd_config_list(args: argparse.Namespace, config: Config) -> int:
+    """List all resolved configuration values."""
+    leaf_items = config.iter_leaf_items()
+    show_origin = getattr(args, "show_origin", False)
+    if getattr(args, "json", False):
+        if show_origin:
+            out = [
+                {"key": k, "value": v, "origin": origin}
+                for k, v, origin in leaf_items
+            ]
+        else:
+            out = {k: v for k, v, _ in leaf_items}
+        print(json.dumps(out, indent=2))
+        return 0
+
+    for k, v, origin in leaf_items:
+        formatted = _format_config_val(v)
+        if show_origin:
+            print(f"{origin}\t{k}={formatted}")
+        else:
+            print(f"{k}={formatted}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     from ot import __version__
     parser = argparse.ArgumentParser(prog="ot", description="Open Tasks (ot) CLI")
@@ -816,6 +895,26 @@ def build_parser() -> argparse.ArgumentParser:
     check_parser = subparsers.add_parser("check", help="Validate project state and configuration")
     check_parser.add_argument("--fix", action="store_true", help="Automatically repair fixable issues")
     check_parser.add_argument("--json", action="store_true", help="Output diagnostics in JSON format")
+
+    # ot config ...
+    config_parser = subparsers.add_parser("config", help="Inspect and modify configuration")
+    config_sub = config_parser.add_subparsers(dest="command")
+
+    cfg_get_p = config_sub.add_parser("get", help="Get resolved value for a configuration key")
+    cfg_get_p.add_argument("key", help="Dot-notation configuration key (e.g. user.editor)")
+    cfg_get_p.add_argument("--show-origin", action="store_true", help="Show the layer that supplied the value")
+
+    cfg_set_p = config_sub.add_parser("set", help="Set a configuration key")
+    cfg_set_p.add_argument("key", help="Dot-notation configuration key")
+    cfg_set_p.add_argument("value", help="Value to set")
+    scope_grp = cfg_set_p.add_mutually_exclusive_group()
+    scope_grp.add_argument("--local", action="store_true", help="Write to .ot/config.local.json")
+    scope_grp.add_argument("--project", action="store_true", help="Write to .ot/config.json")
+    scope_grp.add_argument("--global", dest="global_scope", action="store_true", help="Write to ~/.ot/config.json")
+
+    cfg_list_p = config_sub.add_parser("list", help="List resolved configuration values")
+    cfg_list_p.add_argument("--show-origin", action="store_true", help="Show origin layer for each key")
+    cfg_list_p.add_argument("--json", action="store_true", help="Output in JSON format")
 
     # ot task ...
     task_parser = subparsers.add_parser("task", help="WorkItem management")
@@ -913,6 +1012,17 @@ def main(args: Optional[List[str]] = None) -> int:
 
     if parsed.category == "check":
         return cmd_check(parsed, config)
+
+    if parsed.category == "config":
+        if parsed.command == "get":
+            return cmd_config_get(parsed, config)
+        elif parsed.command == "set":
+            return cmd_config_set(parsed, config)
+        elif parsed.command == "list":
+            return cmd_config_list(parsed, config)
+        else:
+            parser.print_help()
+            return 1
 
 
     if parsed.category == "task":

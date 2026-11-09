@@ -2,10 +2,10 @@
 id: 30dc4752-1ff9-4939-b66a-29b3e637f5c2
 title: Implement ot config CLI subcommands (get, set, list)
 type: feature
-status: planned
+status: completed
 size: medium
 created_at: 2026-11-09T18:36:36.770170+00:00
-updated_at: 2026-11-09T19:32:00.000000+00:00
+updated_at: 2026-11-09T20:56:48.590832+00:00
 author:
   name: Tom Hicks
   email: headhunter3@gmail.com
@@ -25,3 +25,9 @@ Implement configuration inspection and modification commands (`ot config get`, `
 - [ ] `ot config list [--show-origin] [--json]`: Display all resolved configuration keys and values, optionally annotated with their origin layer.
 - [ ] Add unit tests for `get`, `set` (auto-routing + explicit flags + protected key warning), and `list --show-origin`.
 
+## Comments
+
+### Comment by Tom Hicks <headhunter3@gmail.com> on 2026-11-09T20:56:47.911102+00:00
+<!-- comment-id: 891c77db-7f3c-4e9f-b4dd-ca581577bc16 -->
+
+Implemented ot config get, set, and list (--show-origin, --json, and automatic protected-key routing with --local/--project/--global overrides).

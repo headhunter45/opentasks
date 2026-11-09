@@ -132,6 +132,13 @@ def get_global_config_path() -> Path:
     return Path("~/.ot/config.json").expanduser()
 
 
+def is_protected_key(key_path: str) -> bool:
+    """Return True if key_path is a protected configuration key or nested within one."""
+    if key_path in PROTECTED_CONFIG_KEYS:
+        return True
+    return any(key_path.startswith(f"{p}.") for p in PROTECTED_CONFIG_KEYS)
+
+
 def find_protected_key_violations(local_config: Dict[str, Any]) -> List[str]:
     """Find any protected keys defined in a local or user override config."""
     violations = []
@@ -209,14 +216,44 @@ class Config:
         data: Dict[str, Any],
         project_root: Optional[Path] = None,
         warnings: Optional[List[str]] = None,
+        origins: Optional[Dict[str, str]] = None,
     ):
         self._data = data
         self.project_root = project_root
         self.warnings: List[str] = warnings or []
+        self.origins: Dict[str, str] = origins or {}
 
     @property
     def raw(self) -> Dict[str, Any]:
         return self._data
+
+    def get_origin(self, key_path: str) -> str:
+        """Return the configuration layer that supplied `key_path`."""
+        if key_path in self.origins:
+            return self.origins[key_path]
+        # Check parent keys if a whole dict was overridden
+        parts = key_path.split(".")
+        for i in range(len(parts) - 1, 0, -1):
+            prefix = ".".join(parts[:i])
+            if prefix in self.origins:
+                return self.origins[prefix]
+        return "default"
+
+    def iter_leaf_items(self) -> List[Tuple[str, Any, str]]:
+        """Return list of (dotted_key, value, origin) for all leaf configuration entries."""
+        items: List[Tuple[str, Any, str]] = []
+
+        def _walk(d: Dict[str, Any], prefix: str = "") -> None:
+            for k in sorted(d.keys()):
+                v = d[k]
+                full_key = f"{prefix}.{k}" if prefix else k
+                if isinstance(v, dict) and v:
+                    _walk(v, full_key)
+                else:
+                    items.append((full_key, v, self.get_origin(full_key)))
+
+        _walk(self._data)
+        return items
 
     def get(self, key_path: str, default: Any = None) -> Any:
         """Retrieve a value using dot notation (e.g. 'workItem.types.bug.label')."""
@@ -323,6 +360,70 @@ class Config:
         return base / ".ot" / "templates"
 
 
+def parse_config_value(raw_val: str) -> Any:
+    """Parse a CLI string value into JSON boolean/number/object/array, or keep as string."""
+    stripped = raw_val.strip()
+    if stripped in ("true", "false", "null") or (
+        stripped and (stripped[0] in "{[\"" or stripped.lstrip("-").replace(".", "", 1).isdigit())
+    ):
+        try:
+            return json.loads(stripped)
+        except Exception:
+            pass
+    return raw_val
+
+
+def set_config_key(
+    project_root: Optional[Path],
+    key_path: str,
+    raw_val: str,
+    scope: Optional[str] = None,
+) -> Tuple[Path, Any, Optional[str]]:
+    """Set a dot-notation configuration key in the target configuration file.
+
+    `scope` may be 'local', 'project', 'global', or None (auto-route based on protected status).
+    Returns (target_file_path, parsed_value, optional_warning).
+    """
+    protected = is_protected_key(key_path)
+    warning: Optional[str] = None
+
+    if scope == "global":
+        target_path = get_global_config_path()
+        if protected:
+            warning = (
+                f"Warning: '{key_path}' is a protected project configuration key; "
+                f"overriding it in global config ({target_path}) is discouraged."
+            )
+    elif scope == "local":
+        if not project_root:
+            raise FileNotFoundError("No Open Tasks project root (.ot) found.")
+        target_path = project_root / ".ot" / "config.local.json"
+        if protected:
+            warning = (
+                f"Warning: '{key_path}' is a protected project configuration key; "
+                "placing it in .ot/config.local.json will be flagged by 'ot check'."
+            )
+    elif scope == "project":
+        if not project_root:
+            raise FileNotFoundError("No Open Tasks project root (.ot) found.")
+        target_path = project_root / ".ot" / "config.json"
+    else:
+        if not project_root:
+            raise FileNotFoundError("No Open Tasks project root (.ot) found.")
+        target_path = (
+            (project_root / ".ot" / "config.json")
+            if protected
+            else (project_root / ".ot" / "config.local.json")
+        )
+
+    parsed_val = parse_config_value(raw_val)
+    data = load_json_file(target_path) if target_path.is_file() else {}
+    _set_dotted_merge(data, key_path, parsed_val)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    target_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    return target_path, parsed_val, warning
+
+
 def load_config(start_dir: Optional[Path | str] = None) -> Config:
     """Load and resolve configuration according to the precedence rules:
     1. .ot/config.local.json
@@ -332,11 +433,16 @@ def load_config(start_dir: Optional[Path | str] = None) -> Config:
     5. Environment variables (OT_USER, USER, EMAIL, EDITOR, VISUAL)
     6. System Defaults
     """
+    import copy
+
     project_root = find_project_root(start_dir)
     warnings: List[str] = []
+    origins: Dict[str, str] = {}
 
     # 1. System defaults
-    resolved = dict(DEFAULT_CONFIG)
+    resolved = copy.deepcopy(DEFAULT_CONFIG)
+    for k in get_flattened_keys(resolved):
+        origins[k] = "default"
 
     # 2. Global user config (~/.ot/config.json or $OT_USER_HOME/config.json)
     global_config_path = get_global_config_path()
@@ -345,6 +451,8 @@ def load_config(start_dir: Optional[Path | str] = None) -> Config:
         violations = find_protected_key_violations(global_config)
         for v in violations:
             warnings.append(f"Protected configuration key '{v}' is improperly overridden in global config ({global_config_path})")
+        for k in get_flattened_keys(global_config):
+            origins[k] = "~/.ot/config.json"
         resolved = deep_merge(resolved, global_config)
 
     # 3. Project config (.ot/config.json)
@@ -352,6 +460,8 @@ def load_config(start_dir: Optional[Path | str] = None) -> Config:
         proj_config_path = project_root / ".ot" / "config.json"
         proj_config = load_json_file(proj_config_path)
         if proj_config:
+            for k in get_flattened_keys(proj_config):
+                origins[k] = ".ot/config.json"
             resolved = deep_merge(resolved, proj_config)
 
         # 4. Project local config (.ot/config.local.json)
@@ -361,6 +471,8 @@ def load_config(start_dir: Optional[Path | str] = None) -> Config:
             violations = find_protected_key_violations(local_config)
             for v in violations:
                 warnings.append(f"Protected configuration key '{v}' is improperly overridden in {local_config_path.name}")
+            for k in get_flattened_keys(local_config):
+                origins[k] = ".ot/config.local.json"
             resolved = deep_merge(resolved, local_config)
 
     # 5. VCS & Environment fallbacks for user identity and editor
@@ -369,13 +481,28 @@ def load_config(start_dir: Optional[Path | str] = None) -> Config:
         git_name, git_email = get_git_identity(project_root)
         sys_name, sys_email = get_system_identity()
         if not user_dict.get("name"):
-            user_dict["name"] = git_name or sys_name
+            if git_name:
+                user_dict["name"] = git_name
+                origins["user.name"] = "vcs (git)"
+            else:
+                user_dict["name"] = sys_name
+                origins["user.name"] = "environment"
         if not user_dict.get("email"):
-            user_dict["email"] = git_email or sys_email
+            if git_email:
+                user_dict["email"] = git_email
+                origins["user.email"] = "vcs (git)"
+            else:
+                user_dict["email"] = sys_email
+                origins["user.email"] = "environment"
 
     if not user_dict.get("editor"):
         git_editor = get_git_editor(project_root)
         sys_editor = get_system_editor()
-        user_dict["editor"] = git_editor or sys_editor
+        if git_editor:
+            user_dict["editor"] = git_editor
+            origins["user.editor"] = "vcs (git)"
+        else:
+            user_dict["editor"] = sys_editor
+            origins["user.editor"] = "environment"
 
-    return Config(resolved, project_root=project_root, warnings=warnings)
+    return Config(resolved, project_root=project_root, warnings=warnings, origins=origins)

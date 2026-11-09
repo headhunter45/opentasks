@@ -99,6 +99,63 @@ class TestConfigLoader(unittest.TestCase):
             self.assertFalse(cfg.is_within_project_root("../outside"))
             self.assertFalse(cfg.is_within_project_root("/etc/passwd"))
 
+    def test_cli_config_get_set_list(self):
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+        from ot.cli import main
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            ot_dir = root / ".ot"
+            ot_dir.mkdir()
+            (ot_dir / "config.json").write_text(
+                json.dumps({"project": {"name": "Config CLI Test"}}),
+                encoding="utf-8",
+            )
+
+            # 1. ot config get project.name --show-origin
+            out1 = io.StringIO()
+            with redirect_stdout(out1):
+                ret1 = main(["-C", str(root), "config", "get", "project.name", "--show-origin"])
+            self.assertEqual(ret1, 0)
+            self.assertIn(".ot/config.json\tConfig CLI Test", out1.getvalue())
+
+            # 2. ot config set user.editor code (unprotected -> auto-routes to config.local.json)
+            out2 = io.StringIO()
+            with redirect_stdout(out2):
+                ret2 = main(["-C", str(root), "config", "set", "user.editor", "code"])
+            self.assertEqual(ret2, 0)
+            self.assertIn("config.local.json", out2.getvalue())
+            local_data = json.loads((ot_dir / "config.local.json").read_text(encoding="utf-8"))
+            self.assertEqual(local_data["user"]["editor"], "code")
+
+            # 3. ot config set project.description "A description" (protected -> auto-routes to config.json)
+            out3 = io.StringIO()
+            with redirect_stdout(out3):
+                ret3 = main(["-C", str(root), "config", "set", "project.description", "A description"])
+            self.assertEqual(ret3, 0)
+            self.assertIn("config.json", out3.getvalue())
+            proj_data = json.loads((ot_dir / "config.json").read_text(encoding="utf-8"))
+            self.assertEqual(proj_data["project"]["description"], "A description")
+
+            # 4. ot config set project.name "Bad Local" --local emits warning to stderr
+            out4 = io.StringIO()
+            err4 = io.StringIO()
+            with redirect_stdout(out4), redirect_stderr(err4):
+                ret4 = main(["-C", str(root), "config", "set", "project.name", "Bad Local", "--local"])
+            self.assertEqual(ret4, 0)
+            self.assertIn("Warning:", err4.getvalue())
+
+            # 5. ot config list --show-origin --json
+            out5 = io.StringIO()
+            with redirect_stdout(out5):
+                ret5 = main(["-C", str(root), "config", "list", "--show-origin", "--json"])
+            self.assertEqual(ret5, 0)
+            entries = json.loads(out5.getvalue())
+            by_key = {e["key"]: e for e in entries}
+            self.assertEqual(by_key["user.editor"]["origin"], ".ot/config.local.json")
+            self.assertEqual(by_key["project.description"]["origin"], ".ot/config.json")
+
 
 if __name__ == "__main__":
     unittest.main()

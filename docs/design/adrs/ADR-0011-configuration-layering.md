@@ -84,7 +84,8 @@ Negative:
 
 ## Amendments (As-Built)
 
-- **Implemented Layering (`src/ot/config.py`)**: `load_config` merges `DEFAULT_CONFIG`, `~/.ot/config.json`, `.ot/config.json`, and `.ot/config.local.json` with VCS and environment fallbacks.
-- **Deferred / Partial Scope**:
-  - CLI commands for inspecting and modifying configuration layers (`ot config get`, `ot config set`, `ot config list`) are tracked in task `30dc47`.
+- **Implemented Layering & CLI (`src/ot/config.py`, `src/ot/cli.py`)**:
+  - `load_config` merges `DEFAULT_CONFIG`, `~/.ot/config.json` (`$OT_USER_HOME/config.json`), `.ot/config.json`, and `.ot/config.local.json` with VCS and environment fallbacks while tracking the origin layer for every configuration key.
+  - `ot config get <key> [--show-origin]`, `ot config set <key> <value> [--local | --project | --global]`, and `ot config list [--show-origin] [--json]` inspect and modify configuration across layers (task `30dc47`).
+
 

@@ -72,5 +72,5 @@ Negative:
 - **Deep Merging & Per-Field Fallbacks (`src/ot/config.py`)**:
   - JSON configuration files (`DEFAULT_CONFIG` <- `~/.ot/config.json` <- `.ot/config.json` <- `.ot/config.local.json`) are combined via recursive dictionary merge (`deep_merge`).
   - VCS and environment fallbacks are then applied individually for unset `user.name`, `user.email`, and `user.editor` fields.
-- **Configuration Inspection Tooling**: CLI commands (`ot config get`, `ot config set`, `ot config list`) are tracked in task `30dc47`.
+- **Configuration Inspection Tooling (`src/ot/cli.py`, `src/ot/config.py`)**: `ot config get <key> --show-origin` and `ot config list --show-origin [--json]` report the resolved value and exact origin layer (`.ot/config.local.json`, `.ot/config.json`, `~/.ot/config.json`, `vcs (git)`, `environment`, or `default`) for every key (task `30dc47`).
 
