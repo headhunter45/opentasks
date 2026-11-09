@@ -23,7 +23,7 @@ from ot.config import (
 from ot.discovery import check_vcs_safety, find_project_root
 from ot.identifiers import is_valid_uuid
 from ot.models import WorkItem
-from ot.parser import read_work_item, write_work_item
+from ot.parser import read_meeting, read_work_item, write_work_item
 from ot.scanner import RepositoryScanner, WorkItemIndex
 
 
@@ -789,8 +789,9 @@ class Validator:
                     )
                 )
 
-        # Also validate relative Markdown links and conflict markers in meetings and templates if present
+        # Also validate meetings (metadata, relative Markdown links, and conflict markers) if present
         meetings_dir = self.config.meetings_dir if self.config else (self.project_root / ".ot" / "meetings")
+        valid_meeting_types = set(self.config.get("meeting.types", {}).keys()) if self.config else set()
         if meetings_dir.is_dir():
             for mtg_file in sorted(meetings_dir.rglob("*.md")):
                 if "attachments" in mtg_file.parts:
@@ -812,6 +813,41 @@ class Validator:
                             mtg_text, mtg_file, category="meeting"
                         )
                     )
+                    if FRONTMATTER_Check := mtg_text.lstrip().startswith("---"):
+                        mtg = read_meeting(mtg_file)
+                        if valid_meeting_types and mtg.type not in valid_meeting_types:
+                            diagnostics.append(
+                                Diagnostic(
+                                    severity=Severity.ERROR,
+                                    category="meeting",
+                                    message=f"Invalid meeting type '{mtg.type}' in {mtg_file.name}. Expected one of: {', '.join(sorted(valid_meeting_types))}",
+                                    file_path=mtg_file,
+                                    item_id=mtg.id,
+                                    is_fixable=False,
+                                )
+                            )
+                        if mtg.status not in ("active", "ended"):
+                            diagnostics.append(
+                                Diagnostic(
+                                    severity=Severity.ERROR,
+                                    category="meeting",
+                                    message=f"Invalid meeting status '{mtg.status}' in {mtg_file.name}. Expected 'active' or 'ended'.",
+                                    file_path=mtg_file,
+                                    item_id=mtg.id,
+                                    is_fixable=False,
+                                )
+                            )
+                        if not mtg.started_at:
+                            diagnostics.append(
+                                Diagnostic(
+                                    severity=Severity.ERROR,
+                                    category="meeting",
+                                    message=f"Meeting {mtg_file.name} is missing 'started_at' timestamp.",
+                                    file_path=mtg_file,
+                                    item_id=mtg.id,
+                                    is_fixable=False,
+                                )
+                            )
                 except Exception:
                     pass
 

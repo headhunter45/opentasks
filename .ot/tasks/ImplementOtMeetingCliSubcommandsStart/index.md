@@ -2,10 +2,10 @@
 id: a9baacd2-f5f4-43fa-b353-114f93722038
 title: Implement ot meeting CLI subcommands (start, end, list)
 type: feature
-status: planned
+status: completed
 size: medium
 created_at: 2026-11-09T17:55:12.934402+00:00
-updated_at: 2026-11-09T19:32:00.000000+00:00
+updated_at: 2026-11-09T21:19:07.110659+00:00
 author:
   name: Tom Hicks
   email: headhunter3@gmail.com
@@ -30,3 +30,9 @@ Implement `ot meeting start`, `ot meeting end`, and `ot meeting list` storing ea
 - [ ] Validate meetings in `ot check` (valid configured meeting `type`, valid `status`, valid timestamps).
 - [ ] Add unit tests for `meeting start`, `meeting end`, `meeting list`, and meeting validation.
 
+## Comments
+
+### Comment by Tom Hicks <headhunter3@gmail.com> on 2026-11-09T21:19:06.582692+00:00
+<!-- comment-id: 9377d9c4-2552-4016-a88a-d47e669b2bb5 -->
+
+Implemented ot meeting start, end, and list CLI subcommands, updated default meeting templates, and added meeting validation to ot check.

@@ -163,8 +163,13 @@ tags:
 Routine maintenance, cleanup, or dependencies update.
 """,
     "meetings/grooming.md": """---
+id: {{id}}
 type: grooming
-date: {{date}}
+status: active
+started_at: {{started_at}}
+organizer:
+  name: {{organizer_name}}
+  email: {{organizer_email}}
 attendees: []
 ---
 
@@ -180,8 +185,13 @@ attendees: []
 - [ ] Item 1
 """,
     "meetings/planning.md": """---
+id: {{id}}
 type: planning
-date: {{date}}
+status: active
+started_at: {{started_at}}
+organizer:
+  name: {{organizer_name}}
+  email: {{organizer_email}}
 attendees: []
 ---
 
@@ -196,8 +206,13 @@ attendees: []
 - [ ] Item 1
 """,
     "meetings/retrospective.md": """---
+id: {{id}}
 type: retrospective
-date: {{date}}
+status: active
+started_at: {{started_at}}
+organizer:
+  name: {{organizer_name}}
+  email: {{organizer_email}}
 attendees: []
 ---
 
@@ -210,8 +225,13 @@ attendees: []
 ## Action Items
 """,
     "meetings/ideation.md": """---
+id: {{id}}
 type: ideation
-date: {{date}}
+status: active
+started_at: {{started_at}}
+organizer:
+  name: {{organizer_name}}
+  email: {{organizer_email}}
 attendees: []
 ---
 
@@ -240,6 +260,27 @@ KNOWN_DEFAULT_TEMPLATE_HASHES: Dict[str, Set[str]] = {
     rel_path: {_template_sha256(content)}
     for rel_path, content in DEFAULT_TEMPLATES.items()
 }
+
+# Register historical v0.1.0-v0.3.0 meeting template hashes so `ot upgrade` updates them cleanly.
+for _rel, _old_body in [
+    (
+        "meetings/grooming.md",
+        "---\ntype: grooming\ndate: {{date}}\nattendees: []\n---\n\n# Backlog Grooming - {{date}}\n\n## Agenda\n\n- Review incoming triage items\n- Estimate sizing and requirements\n\n## Action Items\n\n- [ ] Item 1",
+    ),
+    (
+        "meetings/planning.md",
+        "---\ntype: planning\ndate: {{date}}\nattendees: []\n---\n\n# Sprint Planning - {{date}}\n\n## Goals\n\n- Prioritize items for next cycle\n\n## Selected WorkItems\n\n- [ ] Item 1",
+    ),
+    (
+        "meetings/retrospective.md",
+        "---\ntype: retrospective\ndate: {{date}}\nattendees: []\n---\n\n# Retrospective - {{date}}\n\n## What Went Well\n\n## What Could Be Improved\n\n## Action Items",
+    ),
+    (
+        "meetings/ideation.md",
+        "---\ntype: ideation\ndate: {{date}}\nattendees: []\n---\n\n# Ideation & Brainstorming - {{date}}\n\n## Topic\n\n## Discussion Notes",
+    ),
+]:
+    KNOWN_DEFAULT_TEMPLATE_HASHES.setdefault(_rel, set()).add(_template_sha256(_old_body))
 
 
 def register_historical_template_hash(rel_path: str, sha256_hex: str) -> None:

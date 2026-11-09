@@ -75,5 +75,9 @@ Negative:
 
 ## Amendments (As-Built)
 
-- **Implementation Tracking**: Implementing `ot meeting start`, `ot meeting end`, and `ot meeting list` with this directory structure and frontmatter schema is tracked in task `a9baac`.
+- **Implemented Meeting Model, Storage, and CLI (`src/ot/models.py`, `src/ot/parser.py`, `src/ot/cli.py`, `src/ot/validation.py`)**:
+  - `ot meeting start` renders `.ot/templates/meetings/<type>.md` into `<meetings_dir>/<type>/<YYYY-MM-DDTHH-MM-SS>/index.md` with `id`, `type`, `status: active`, `started_at`, `organizer`, and `attendees` in YAML frontmatter (task `a9baac`).
+  - `ot meeting end [<id_or_type>]` locates active meetings by scanning the meetings directory, resolves the target meeting (or prompts when multiple active meetings exist), sets `status: ended` and `ended_at`, and prints a pull-request review reminder.
+  - `ot meeting list [--status <status>] [--type <type>] [--json]` lists meetings in a summary table or JSON array, and `Validator` validates meeting `type`, `status`, and `started_at` in `ot check`.
+
 

@@ -256,3 +256,103 @@ class WorkItem:
         return False
 
 
+@dataclass
+class Meeting:
+    """Represents a loaded Meeting document."""
+
+    id: str = field(default_factory=generate_uuid)
+    type: str = "grooming"
+    status: str = "active"
+    started_at: str = field(default_factory=now_iso)
+    ended_at: Optional[str] = None
+    organizer: Optional[Author] = None
+    attendees: List[str] = field(default_factory=list)
+    custom: Dict[str, Any] = field(default_factory=dict)
+    body: str = ""
+    path: Optional[Path] = None
+    is_legacy: bool = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        data: Dict[str, Any] = {
+            "id": self.id,
+            "type": self.type,
+            "status": self.status,
+            "started_at": self.started_at,
+            "ended_at": self.ended_at,
+            "organizer": self.organizer.to_dict() if self.organizer else None,
+            "attendees": list(self.attendees),
+            "path": str(self.path) if self.path else None,
+        }
+        for k, v in self.custom.items():
+            if k not in data:
+                data[k] = v
+        return data
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any], body: str = "", path: Optional[Path] = None) -> Meeting:
+        import hashlib
+
+        known_keys = {
+            "id",
+            "type",
+            "status",
+            "started_at",
+            "ended_at",
+            "organizer",
+            "attendees",
+        }
+        is_legacy = "id" not in data and "status" not in data and "started_at" not in data
+        raw_id = data.get("id")
+        if raw_id:
+            mtg_id = str(raw_id)
+        elif path:
+            # Deterministic UUID-like hex from path for legacy meeting notes without `id`
+            h = hashlib.sha256(str(path.name).encode("utf-8")).hexdigest()
+            mtg_id = f"{h[:8]}-{h[8:12]}-4{h[13:16]}-8{h[17:20]}-{h[20:32]}"
+        else:
+            mtg_id = generate_uuid()
+
+        mtg_type = str(data.get("type") or "grooming")
+        if "status" in data and data["status"] is not None:
+            status = str(data["status"])
+        elif is_legacy:
+            status = "ended"
+        else:
+            status = "active"
+
+        started_at = str(data.get("started_at") or data.get("date") or "")
+        ended_at = str(data["ended_at"]) if data.get("ended_at") is not None else None
+        organizer = Author.from_dict(data.get("organizer"))
+
+        attendees_raw = data.get("attendees")
+        attendees: List[str] = []
+        if isinstance(attendees_raw, list):
+            for entry in attendees_raw:
+                if isinstance(entry, dict):
+                    nm = entry.get("name", "")
+                    em = entry.get("email")
+                    attendees.append(f"{nm} <{em}>" if em else str(nm))
+                elif entry is not None:
+                    attendees.append(str(entry))
+        elif isinstance(attendees_raw, dict):
+            nm = attendees_raw.get("name", "")
+            em = attendees_raw.get("email")
+            if nm or em:
+                attendees.append(f"{nm} <{em}>" if em else str(nm))
+
+        custom = {k: v for k, v in data.items() if k not in known_keys}
+        return cls(
+            id=mtg_id,
+            type=mtg_type,
+            status=status,
+            started_at=started_at,
+            ended_at=ended_at,
+            organizer=organizer,
+            attendees=attendees,
+            custom=custom,
+            body=body.strip(),
+            path=path,
+            is_legacy=is_legacy,
+        )
+
+

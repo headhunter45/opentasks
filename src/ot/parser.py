@@ -8,7 +8,7 @@ import re
 import tempfile
 from typing import Any, Dict, List, Optional, Tuple
 
-from ot.models import Author, Comment, WorkItem, WorkItemMetadata, generate_uuid, now_iso
+from ot.models import Author, Comment, Meeting, WorkItem, WorkItemMetadata, generate_uuid, now_iso
 
 FRONTMATTER_PATTERN = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 COMMENT_HEADER_PATTERN = re.compile(
@@ -64,7 +64,11 @@ def parse_yaml_frontmatter(yaml_text: str) -> Dict[str, Any]:
             v = v.strip()
             if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
                 v = v[1:-1]
-            if v:
+            if v == "[]":
+                data[current_key] = []
+            elif v == "{}":
+                data[current_key] = {}
+            elif v:
                 data[current_key] = v
             else:
                 data[current_key] = None
@@ -247,3 +251,118 @@ def write_work_item(item: WorkItem, target_path: Optional[Path | str] = None) ->
     os.replace(temp_name, dest)
     item.path = dest
     return dest
+
+
+def serialize_meeting_frontmatter(meeting: Meeting) -> str:
+    """Serialize Meeting metadata to YAML frontmatter string."""
+    lines = ["---"]
+    lines.append(f"id: {meeting.id}")
+    lines.append(f"type: {meeting.type}")
+    lines.append(f"status: {meeting.status}")
+    lines.append(f"started_at: {meeting.started_at}")
+    if meeting.ended_at:
+        lines.append(f"ended_at: {meeting.ended_at}")
+    if meeting.organizer:
+        lines.append("organizer:")
+        lines.append(f"  name: {meeting.organizer.name}")
+        if meeting.organizer.email:
+            lines.append(f"  email: {meeting.organizer.email}")
+    if meeting.attendees:
+        lines.append("attendees:")
+        for att in meeting.attendees:
+            lines.append(f"  - {att}")
+    else:
+        lines.append("attendees: []")
+
+    for k, v in meeting.custom.items():
+        if isinstance(v, list):
+            lines.append(f"{k}:")
+            for item in v:
+                lines.append(f"  - {item}")
+        elif isinstance(v, dict):
+            lines.append(f"{k}:")
+            for sub_k, sub_v in v.items():
+                lines.append(f"  {sub_k}: {sub_v}")
+        elif v is not None:
+            lines.append(f"{k}: {v}")
+
+    lines.append("---")
+    return "\n".join(lines)
+
+
+def parse_meeting_content(content: str, file_path: Optional[Path] = None) -> Meeting:
+    """Parse raw text content of a Meeting document into a Meeting instance."""
+    match = FRONTMATTER_PATTERN.match(content)
+    if match:
+        yaml_text = match.group(1)
+        body_text = content[match.end() :]
+        meta_dict = parse_yaml_frontmatter(yaml_text)
+    else:
+        meta_dict = {}
+        body_text = content
+    return Meeting.from_dict(meta_dict, body=body_text, path=file_path)
+
+
+def read_meeting(path: Path | str) -> Meeting:
+    """Read and parse a Meeting from a file or directory."""
+    p = Path(path).resolve()
+    if p.is_dir():
+        p = p / "index.md"
+    if not p.is_file():
+        raise FileNotFoundError(f"Meeting file not found at {p}")
+    content = p.read_text(encoding="utf-8")
+    return parse_meeting_content(content, file_path=p)
+
+
+def render_meeting(meeting: Meeting) -> str:
+    """Render a Meeting instance to Markdown with YAML frontmatter and body."""
+    parts = [serialize_meeting_frontmatter(meeting)]
+    if meeting.body:
+        parts.append("")
+        parts.append(meeting.body.strip())
+    parts.append("")
+    return "\n".join(parts)
+
+
+def write_meeting(meeting: Meeting, target_path: Optional[Path | str] = None) -> Path:
+    """Atomically write a Meeting to target_path or its existing path."""
+    dest = Path(target_path or meeting.path).resolve()
+    if dest.is_dir():
+        dest = dest / "index.md"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+
+    rendered = render_meeting(meeting)
+    with tempfile.NamedTemporaryFile("w", dir=dest.parent, delete=False, encoding="utf-8") as tf:
+        tf.write(rendered)
+        temp_name = tf.name
+
+    os.replace(temp_name, dest)
+    meeting.path = dest
+    return dest
+
+
+def scan_meetings(project_root: Optional[Path | str] = None) -> List[Meeting]:
+    """Scan configured meetings directory for all Meeting documents."""
+    from ot.config import load_config
+    from ot.discovery import find_project_root
+
+    root = find_project_root(project_root)
+    if not root:
+        return []
+    try:
+        meetings_dir = load_config(root).meetings_dir
+    except Exception:
+        meetings_dir = root / ".ot" / "meetings"
+
+    if not meetings_dir.is_dir():
+        return []
+
+    meetings: List[Meeting] = []
+    for md_path in sorted(meetings_dir.rglob("*.md")):
+        if "attachments" in md_path.parts:
+            continue
+        try:
+            meetings.append(read_meeting(md_path))
+        except Exception:
+            pass
+    return meetings

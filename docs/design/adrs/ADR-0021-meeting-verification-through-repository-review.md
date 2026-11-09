@@ -63,3 +63,8 @@ Positive:
 Negative:
 
 - Requires repository workflows
+
+## Amendments (As-Built)
+
+- **Meeting Lifecycle & Pull Request Reminder (`src/ot/cli.py`, `src/ot/parser.py`)**: `ot meeting start`, `ot meeting end`, and `ot meeting list` manage meeting records under `<meetings_dir>/<type>/<YYYY-MM-DDTHH-MM-SS>/index.md`, and `ot meeting end` prints a reminder encouraging attendees to review and publish meeting notes and work item changes via pull request (task `a9baac`).
+

@@ -15,8 +15,18 @@ from typing import List, Optional
 from ot.config import Config, get_flattened_keys, load_config, set_config_key
 from ot.discovery import check_vcs_safety, discover_root, find_project_root
 from ot.identifiers import generate_uuid
-from ot.models import Author, Comment, WorkItem, WorkItemMetadata, now_iso
-from ot.parser import parse_work_item_content, read_work_item, render_work_item, write_work_item
+from ot.models import Author, Comment, Meeting, WorkItem, WorkItemMetadata, now_iso
+from ot.parser import (
+    parse_meeting_content,
+    parse_work_item_content,
+    read_meeting,
+    read_work_item,
+    render_meeting,
+    render_work_item,
+    scan_meetings,
+    write_meeting,
+    write_work_item,
+)
 from ot.scanner import WorkItemIndex, load_index
 
 
@@ -849,6 +859,161 @@ def cmd_config_list(args: argparse.Namespace, config: Config) -> int:
     return 0
 
 
+def cmd_meeting_start(args: argparse.Namespace, config: Config) -> int:
+    """Start a new planning meeting."""
+    from datetime import datetime, timezone
+    from ot.templates import get_template, render_template
+
+    if not config.project_root:
+        print("Error: No Open Tasks project root (.ot) found.", file=sys.stderr)
+        return 1
+
+    mtype = (args.type or "grooming").strip().lower()
+    valid_types = config.get("meeting.types", {}) or {}
+    if valid_types and mtype not in valid_types:
+        allowed = ", ".join(sorted(valid_types.keys()))
+        print(
+            f"Error: Invalid meeting type '{mtype}'. Allowed types: {allowed}",
+            file=sys.stderr,
+        )
+        return 1
+
+    meeting_id = generate_uuid()
+    started_at = now_iso()
+    date_str = started_at[:10]
+    ts_folder = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
+    meeting_dir = config.meetings_dir / mtype / ts_folder
+    if meeting_dir.exists():
+        meeting_dir = config.meetings_dir / mtype / f"{ts_folder}-{meeting_id[:6]}"
+    target_path = meeting_dir / "index.md"
+
+    tmpl_text = get_template(f"meetings/{mtype}.md", config.project_root) or get_template(
+        "meetings/grooming.md", config.project_root
+    )
+    organizer = Author(name=config.user_name, email=config.user_email)
+    attendees = list(getattr(args, "attendee", None) or [])
+    if not attendees and config.user_name:
+        attendees = [
+            f"{config.user_name} <{config.user_email}>" if config.user_email else config.user_name
+        ]
+
+    if tmpl_text:
+        rendered_tmpl = render_template(
+            tmpl_text,
+            {
+                "id": meeting_id,
+                "type": mtype,
+                "status": "active",
+                "started_at": started_at,
+                "date": date_str,
+                "organizer_name": config.user_name,
+                "organizer_email": config.user_email or "",
+            },
+        )
+        meeting = parse_meeting_content(rendered_tmpl, file_path=target_path)
+        meeting.id = meeting_id
+        meeting.type = mtype
+        meeting.status = "active"
+        meeting.started_at = started_at
+        meeting.organizer = organizer
+        meeting.attendees = attendees
+    else:
+        meeting = Meeting(
+            id=meeting_id,
+            type=mtype,
+            status="active",
+            started_at=started_at,
+            organizer=organizer,
+            attendees=attendees,
+            body=f"# {mtype.capitalize()} Meeting - {date_str}\n\n## Notes\n",
+            path=target_path,
+        )
+
+    written = write_meeting(meeting, target_path)
+
+    if getattr(args, "edit", False) or not getattr(args, "no_edit", False):
+        editor = config.editor
+        subprocess.run(f"{editor} {written}", shell=True, check=True)
+        updated = read_meeting(written)
+        write_meeting(updated, written)
+
+    print(f"Started {mtype} meeting {meeting_id[:6]} at {written}")
+    return 0
+
+
+def cmd_meeting_end(args: argparse.Namespace, config: Config) -> int:
+    """End an active meeting and record its ended_at timestamp."""
+    if not config.project_root:
+        print("Error: No Open Tasks project root (.ot) found.", file=sys.stderr)
+        return 1
+
+    all_meetings = scan_meetings(config.project_root)
+    active_meetings = [m for m in all_meetings if m.status == "active"]
+
+    target_query = (getattr(args, "target", None) or "").strip().lower()
+    if target_query:
+        matched = [
+            m
+            for m in active_meetings
+            if m.type.lower() == target_query
+            or m.id.lower().startswith(target_query)
+            or (m.path and m.path.parent.name.lower().startswith(target_query))
+        ]
+    else:
+        matched = active_meetings
+
+    if not matched:
+        print("Error: No matching active meeting found.", file=sys.stderr)
+        return 1
+
+    if len(matched) > 1:
+        summary = ", ".join(f"{m.id[:6]} ({m.type})" for m in matched)
+        print(
+            f"Error: Multiple active meetings found: {summary}. Please specify the meeting ID or type.",
+            file=sys.stderr,
+        )
+        return 1
+
+    mtg = matched[0]
+    mtg.status = "ended"
+    mtg.ended_at = now_iso()
+    write_meeting(mtg)
+    print(f"Ended {mtg.type} meeting {mtg.id[:6]} ({mtg.path})")
+    print("Reminder: Review and publish meeting notes and work item changes via pull request.")
+    return 0
+
+
+def cmd_meeting_list(args: argparse.Namespace, config: Config) -> int:
+    """List meetings in the project."""
+    if not config.project_root:
+        print("Error: No Open Tasks project root (.ot) found.", file=sys.stderr)
+        return 1
+
+    meetings = scan_meetings(config.project_root)
+    if getattr(args, "status", None):
+        st = args.status.strip().lower()
+        meetings = [m for m in meetings if m.status.lower() == st]
+    if getattr(args, "type", None):
+        tp = args.type.strip().lower()
+        meetings = [m for m in meetings if m.type.lower() == tp]
+
+    if getattr(args, "json", False):
+        print(json.dumps([m.to_dict() for m in meetings], indent=2))
+        return 0
+
+    if not meetings:
+        print("No meetings found.")
+        return 0
+
+    print(f"{'ID':<8} {'Type':<16} {'Status':<10} {'Started':<26} {'Ended'}")
+    print("-" * 80)
+    for m in meetings:
+        short_id = m.id[:6]
+        ended_str = m.ended_at or "-"
+        print(f"{short_id:<8} {m.type:<16} {m.status:<10} {m.started_at:<26} {ended_str}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     from ot import __version__
     parser = argparse.ArgumentParser(prog="ot", description="Open Tasks (ot) CLI")
@@ -920,6 +1085,24 @@ def build_parser() -> argparse.ArgumentParser:
     cfg_list_p = config_sub.add_parser("list", help="List resolved configuration values")
     cfg_list_p.add_argument("--show-origin", action="store_true", help="Show origin layer for each key")
     cfg_list_p.add_argument("--json", action="store_true", help="Output in JSON format")
+
+    # ot meeting ...
+    meeting_parser = subparsers.add_parser("meeting", help="Planning meeting workflows")
+    meeting_sub = meeting_parser.add_subparsers(dest="command")
+
+    mtg_start_p = meeting_sub.add_parser("start", help="Start a new meeting")
+    mtg_start_p.add_argument("--type", "-t", default="grooming", help="Meeting type (default: grooming)")
+    mtg_start_p.add_argument("--attendee", action="append", help="Meeting attendee (repeatable)")
+    mtg_start_p.add_argument("--no-edit", action="store_true", help="Do not launch editor")
+    mtg_start_p.add_argument("--edit", action="store_true", help="Launch editor after creating meeting")
+
+    mtg_end_p = meeting_sub.add_parser("end", help="End an active meeting")
+    mtg_end_p.add_argument("target", nargs="?", help="Optional meeting ID or type to end")
+
+    mtg_list_p = meeting_sub.add_parser("list", help="List meetings")
+    mtg_list_p.add_argument("--status", "-s", help="Filter by status (active, ended)")
+    mtg_list_p.add_argument("--type", "-t", help="Filter by meeting type")
+    mtg_list_p.add_argument("--json", action="store_true", help="Output in JSON format")
 
     # ot task ...
     task_parser = subparsers.add_parser("task", help="WorkItem management")
@@ -999,6 +1182,8 @@ def build_parser() -> argparse.ArgumentParser:
         upgrade_parser,
         check_parser,
         cfg_set_p,
+        mtg_start_p,
+        mtg_end_p,
         create_p,
         edit_p,
         update_p,
@@ -1082,6 +1267,17 @@ def main(args: Optional[List[str]] = None) -> int:
             return cmd_config_set(parsed, config)
         elif parsed.command == "list":
             return cmd_config_list(parsed, config)
+        else:
+            parser.print_help()
+            return 1
+
+    if parsed.category == "meeting":
+        if parsed.command == "start":
+            return cmd_meeting_start(parsed, config)
+        elif parsed.command == "end":
+            return cmd_meeting_end(parsed, config)
+        elif parsed.command == "list":
+            return cmd_meeting_list(parsed, config)
         else:
             parser.print_help()
             return 1

@@ -456,6 +456,67 @@ class TestCLICommands(unittest.TestCase):
             for f in ("editor_valid.py", "editor_invalid.py", "editor_create_invalid.py"):
                 (self.root / f).unlink(missing_ok=True)
 
+    def test_cli_meeting_start_end_list(self):
+        # 1. Start a grooming meeting (--no-edit)
+        out1 = io.StringIO()
+        with redirect_stdout(out1):
+            ret1 = main([
+                "-C",
+                str(self.root),
+                "meeting",
+                "start",
+                "--type",
+                "grooming",
+                "--attendee",
+                "Alice <alice@example.com>",
+                "--no-edit",
+            ])
+        self.assertEqual(ret1, 0)
+        self.assertIn("Started grooming meeting", out1.getvalue())
+
+        # 2. Start a second active meeting (planning) to test multiple active meetings & ambiguity
+        out2 = io.StringIO()
+        with redirect_stdout(out2):
+            ret2 = main(["-C", str(self.root), "meeting", "start", "-t", "planning", "--no-edit"])
+        self.assertEqual(ret2, 0)
+
+        # 3. List active meetings in JSON
+        out_list = io.StringIO()
+        with redirect_stdout(out_list):
+            ret_list = main(["-C", str(self.root), "meeting", "list", "--status", "active", "--json"])
+        self.assertEqual(ret_list, 0)
+        active = json.loads(out_list.getvalue())
+        self.assertEqual(len(active), 2)
+
+        # 4. Ending without specifying target when 2 are active fails with ambiguity message
+        err_amb = io.StringIO()
+        with redirect_stderr(err_amb):
+            ret_amb = main(["-C", str(self.root), "meeting", "end"])
+        self.assertEqual(ret_amb, 1)
+        self.assertIn("Multiple active meetings found", err_amb.getvalue())
+
+        # 5. End grooming meeting by type, then end remaining active meeting without argument
+        out_end1 = io.StringIO()
+        with redirect_stdout(out_end1):
+            ret_end1 = main(["-C", str(self.root), "meeting", "end", "grooming"])
+        self.assertEqual(ret_end1, 0)
+        self.assertIn("Ended grooming meeting", out_end1.getvalue())
+        self.assertIn("pull request", out_end1.getvalue())
+
+        out_end2 = io.StringIO()
+        with redirect_stdout(out_end2):
+            ret_end2 = main(["-C", str(self.root), "meeting", "end"])
+        self.assertEqual(ret_end2, 0)
+        self.assertIn("Ended planning meeting", out_end2.getvalue())
+
+        # 6. Verify both are now ended
+        out_ended = io.StringIO()
+        with redirect_stdout(out_ended):
+            main(["-C", str(self.root), "meeting", "list", "--status", "ended", "--json"])
+        ended = json.loads(out_ended.getvalue())
+        self.assertEqual(len(ended), 2)
+        self.assertTrue(all(m["ended_at"] is not None for m in ended))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,11 @@
 ---
+id: {{id}}
 type: grooming
-date: {{date}}
+status: active
+started_at: {{started_at}}
+organizer:
+  name: {{organizer_name}}
+  email: {{organizer_email}}
 attendees: []
 ---
 
