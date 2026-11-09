@@ -48,10 +48,20 @@ class TestValidationAndRepair(unittest.TestCase):
 
 
     def test_protected_key_misplacement_detection_and_repair(self):
-        # Put protected key in config.local.json
+        # Put protected key alongside an unprotected sibling key in config.local.json
         local_cfg = self.root / ".ot" / "config.local.json"
         local_cfg.write_text(
-            json.dumps({"workItem": {"types": {"custom": {"label": "Custom"}}}}),
+            json.dumps(
+                {
+                    "workItem": {
+                        "types": {"custom": {"label": "Custom"}},
+                        "customUnprotectedSetting": True,
+                    },
+                    "project": {
+                        "name": "Local Project Override",
+                    },
+                }
+            ),
             encoding="utf-8",
         )
 
@@ -65,9 +75,57 @@ class TestValidationAndRepair(unittest.TestCase):
         repairs = repairer.repair()
         self.assertTrue(any("config.local.json" in r for r in repairs))
 
-        # Check that protected key was moved to config.json
+        # Check that protected keys were deep-merged into config.json
         proj_cfg_data = json.loads((self.root / ".ot" / "config.json").read_text(encoding="utf-8"))
-        self.assertIn("workItem", proj_cfg_data)
+        self.assertEqual(proj_cfg_data["workItem"]["types"]["custom"]["label"], "Custom")
+        self.assertEqual(proj_cfg_data["project"]["name"], "Local Project Override")
+
+        # Check that unprotected sibling under workItem was preserved and empty 'project' dict was pruned
+        local_cfg_data = json.loads(local_cfg.read_text(encoding="utf-8"))
+        self.assertEqual(local_cfg_data.get("workItem"), {"customUnprotectedSetting": True})
+        self.assertNotIn("project", local_cfg_data)
+
+    def test_global_config_and_cross_layer_schema_validation(self):
+        import os
+
+        old_home = os.environ.get("OT_USER_HOME")
+        global_home = Path(tempfile.mkdtemp())
+        try:
+            os.environ["OT_USER_HOME"] = str(global_home)
+
+            # 1. Protected key and unsupported schema version in global config + mismatch with local config
+            (global_home / "config.json").write_text(
+                json.dumps(
+                    {
+                        "system": {"configSchemaVersion": 2},
+                        "workItem": {"statuses": {"extra": {"label": "Extra"}}},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (self.root / ".ot" / "config.local.json").write_text(
+                json.dumps({"system": {"configSchemaVersion": 1}}),
+                encoding="utf-8",
+            )
+
+            validator = Validator(self.root)
+            diags = validator.validate_configuration()
+            messages = [d.message for d in diags]
+            self.assertTrue(any("Unsupported configuration schema version in global config: 2" in m for m in messages))
+            self.assertTrue(any("Protected configuration key 'workItem.statuses' is improperly placed in global config" in m for m in messages))
+            self.assertTrue(any("Configuration schema version mismatch across layers" in m for m in messages))
+
+            # 2. Invalid JSON in global config produces ERROR diagnostic without crashing Validator
+            (global_home / "config.json").write_text("{invalid json", encoding="utf-8")
+            validator2 = Validator(self.root)
+            diags2 = validator2.validate_configuration()
+            self.assertTrue(any("Failed to parse global config" in d.message and d.severity == Severity.ERROR for d in diags2))
+        finally:
+            if old_home is None:
+                os.environ.pop("OT_USER_HOME", None)
+            else:
+                os.environ["OT_USER_HOME"] = old_home
+            shutil.rmtree(global_home, ignore_errors=True)
 
     def test_self_dependency_detection_and_repair(self):
         # Add self-dependency to an item

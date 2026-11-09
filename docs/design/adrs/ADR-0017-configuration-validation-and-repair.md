@@ -67,12 +67,11 @@ Negative:
 ## Amendments (As-Built)
 
 - **Implemented Configuration Checks (`Validator.validate_configuration` in `src/ot/validation.py`)**:
-  - Validates JSON syntax for `.ot/config.json` and `.ot/config.local.json`.
-  - Verifies `system.configSchemaVersion == 1`.
+  - Validates JSON syntax across `.ot/config.json`, `.ot/config.local.json`, and `~/.ot/config.json` (`$OT_USER_HOME/config.json`).
+  - Verifies `system.configSchemaVersion == 1` in each layer and checks for cross-layer schema version mismatches (task `a9c5de`).
   - Validates `system.toolVersion` semantic version format and checks that it matches the installed binary version in `.ot/bin/` (`validate_project_version`).
-  - Detects protected configuration keys placed in `.ot/config.local.json` (`Severity.WARNING`, fixable).
+  - Detects protected configuration keys placed in `.ot/config.local.json` (`Severity.WARNING`, fixable) and `~/.ot/config.json` (`Severity.WARNING`, non-fixable).
 - **Implemented Configuration Repairs (`Repairer.repair` in `src/ot/validation.py`)**:
-  - `ot check --fix` moves protected top-level sections (`workItem`, `meeting`, `system`, `project`) from `.ot/config.local.json` into `.ot/config.json`.
-- **Deferred / Partial Scope**:
-  - Validating `~/.ot/config.json`, cross-layer `configSchemaVersion` compatibility, and fine-grained dotted key repair are tracked in task `a9c5de`.
+  - `ot check --fix` uses `relocate_protected_keys` (`src/ot/config.py`) to deep-merge individual protected dotted keys (`workItem.types`, `workItem.statuses`, `project.name`, etc.) from `.ot/config.local.json` into `.ot/config.json`, preserving unprotected sibling keys and cleaning up empty parent dictionaries (task `a9c5de`).
+
 

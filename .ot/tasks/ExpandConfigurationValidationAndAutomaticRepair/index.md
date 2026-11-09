@@ -2,10 +2,10 @@
 id: a9c5dee2-1e5b-47dd-b2ab-639db6950950
 title: Expand configuration validation and automatic repair in ot check
 type: feature
-status: planned
+status: completed
 size: small
 created_at: 2026-11-09T18:36:39.497473+00:00
-updated_at: 2026-11-09T19:32:00.000000+00:00
+updated_at: 2026-11-09T20:46:41.983846+00:00
 author:
   name: Tom Hicks
   email: headhunter3@gmail.com
@@ -22,3 +22,9 @@ Extend `Validator.validate_configuration` and `Repairer.repair` to validate `~/.
 - [ ] Enhance `Repairer.repair` (`ot check --fix`) to deep-merge and relocate individual protected keys (e.g. `workItem.statuses`, `project.name`) from `.ot/config.local.json` to `.ot/config.json` and clean up empty parent dicts in `config.local.json`.
 - [ ] Add unit tests covering cross-layer schema version mismatches, global config validation, and fine-grained protected key repair.
 
+## Comments
+
+### Comment by Tom Hicks <headhunter3@gmail.com> on 2026-11-09T20:46:41.482360+00:00
+<!-- comment-id: 6ac8c1a6-7914-490c-af9c-4f514d23ed4e -->
+
+Expanded Validator.validate_configuration to check global config JSON syntax, schema version, and protected keys, added cross-layer configSchemaVersion checks, and implemented fine-grained dotted protected key repair via relocate_protected_keys.

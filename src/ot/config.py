@@ -115,14 +115,81 @@ def get_flattened_keys(d: Dict[str, Any], prefix: str = "") -> Set[str]:
     return keys
 
 
+def get_global_config_path() -> Path:
+    """Return path to the user-level global configuration file (~/.ot/config.json or $OT_USER_HOME/config.json)."""
+    user_home = os.getenv("OT_USER_HOME")
+    if user_home:
+        return Path(user_home).expanduser() / "config.json"
+    return Path("~/.ot/config.json").expanduser()
+
+
 def find_protected_key_violations(local_config: Dict[str, Any]) -> List[str]:
     """Find any protected keys defined in a local or user override config."""
     violations = []
     flat_keys = get_flattened_keys(local_config)
-    for protected in PROTECTED_CONFIG_KEYS:
+    for protected in sorted(PROTECTED_CONFIG_KEYS):
         if protected in flat_keys:
             violations.append(protected)
     return violations
+
+
+def _pop_dotted_path(d: Dict[str, Any], key_path: str) -> Tuple[bool, Any]:
+    """Pop a dotted key path from nested dict and prune empty parent dicts."""
+    parts = key_path.split(".")
+    if len(parts) == 1:
+        if parts[0] in d:
+            return True, d.pop(parts[0])
+        return False, None
+
+    head, tail = parts[0], ".".join(parts[1:])
+    sub = d.get(head)
+    if not isinstance(sub, dict):
+        return False, None
+    found, val = _pop_dotted_path(sub, tail)
+    if found and not sub:
+        d.pop(head, None)
+    return found, val
+
+
+def _set_dotted_merge(d: Dict[str, Any], key_path: str, value: Any) -> None:
+    """Deep-merge or set value at dotted key path in nested dict."""
+    parts = key_path.split(".")
+    current = d
+    for part in parts[:-1]:
+        if part not in current or not isinstance(current[part], dict):
+            current[part] = {}
+        current = current[part]
+    leaf = parts[-1]
+    if leaf in current and isinstance(current[leaf], dict) and isinstance(value, dict):
+        current[leaf] = deep_merge(current[leaf], value)
+    else:
+        current[leaf] = value
+
+
+def relocate_protected_keys(
+    local_data: Dict[str, Any], proj_data: Dict[str, Any]
+) -> Tuple[Dict[str, Any], Dict[str, Any], List[str]]:
+    """Move any protected keys from local_data into proj_data via deep-merge.
+
+    Cleans up empty parent dictionaries in local_data and returns
+    (updated_local_data, updated_proj_data, moved_key_paths).
+    """
+    import copy
+
+    new_local = copy.deepcopy(local_data)
+    new_proj = copy.deepcopy(proj_data)
+    moved: List[str] = []
+
+    # Process deeper paths first so specific subkeys (e.g. workItem.statuses, project.name)
+    # are relocated and recorded before top-level containers (e.g. project, system).
+    ordered_protected = sorted(PROTECTED_CONFIG_KEYS, key=lambda k: (-k.count("."), k))
+    for key_path in ordered_protected:
+        found, val = _pop_dotted_path(new_local, key_path)
+        if found:
+            _set_dotted_merge(new_proj, key_path, val)
+            moved.append(key_path)
+
+    return new_local, new_proj, moved
 
 
 class Config:
@@ -209,10 +276,13 @@ def load_config(start_dir: Optional[Path | str] = None) -> Config:
     # 1. System defaults
     resolved = dict(DEFAULT_CONFIG)
 
-    # 2. Global user config (~/.ot/config.json)
-    global_config_path = Path("~/.ot/config.json").expanduser()
+    # 2. Global user config (~/.ot/config.json or $OT_USER_HOME/config.json)
+    global_config_path = get_global_config_path()
     global_config = load_json_file(global_config_path)
     if global_config:
+        violations = find_protected_key_violations(global_config)
+        for v in violations:
+            warnings.append(f"Protected configuration key '{v}' is improperly overridden in global config ({global_config_path})")
         resolved = deep_merge(resolved, global_config)
 
     # 3. Project config (.ot/config.json)

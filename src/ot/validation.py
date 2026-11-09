@@ -15,8 +15,10 @@ from ot.config import (
     DEFAULT_CONFIG,
     PROTECTED_CONFIG_KEYS,
     find_protected_key_violations,
+    get_global_config_path,
     load_config,
     load_json_file,
+    relocate_protected_keys,
 )
 from ot.discovery import find_project_root
 from ot.identifiers import is_valid_uuid
@@ -62,7 +64,10 @@ class Validator:
         self.project_root = find_project_root(project_root)
         self.config: Optional[Config] = None
         if self.project_root:
-            self.config = load_config(self.project_root)
+            try:
+                self.config = load_config(self.project_root)
+            except Exception:
+                self.config = Config(dict(DEFAULT_CONFIG), project_root=self.project_root)
 
     def validate_all(self) -> List[Diagnostic]:
         diagnostics: List[Diagnostic] = []
@@ -115,10 +120,66 @@ class Validator:
         if not self.project_root:
             return diagnostics
 
+        layer_schema_versions: Dict[str, Any] = {}
+
+        # 1. Global user configuration (~/.ot/config.json or $OT_USER_HOME/config.json)
+        global_cfg_path = get_global_config_path()
+        if global_cfg_path.is_file():
+            try:
+                global_data = load_json_file(global_cfg_path)
+                global_schema = global_data.get("system", {}).get("configSchemaVersion")
+                if global_schema is not None:
+                    layer_schema_versions["global"] = global_schema
+                    if global_schema != 1:
+                        diagnostics.append(
+                            Diagnostic(
+                                severity=Severity.ERROR,
+                                category="config",
+                                message=f"Unsupported configuration schema version in global config: {global_schema}",
+                                file_path=global_cfg_path,
+                                is_fixable=False,
+                            )
+                        )
+                violations = find_protected_key_violations(global_data)
+                for v in violations:
+                    diagnostics.append(
+                        Diagnostic(
+                            severity=Severity.WARNING,
+                            category="config",
+                            message=f"Protected configuration key '{v}' is improperly placed in global config ({global_cfg_path.name}).",
+                            file_path=global_cfg_path,
+                            is_fixable=False,
+                        )
+                    )
+            except Exception as e:
+                diagnostics.append(
+                    Diagnostic(
+                        severity=Severity.ERROR,
+                        category="config",
+                        message=f"Failed to parse global config {global_cfg_path.name}: {e}",
+                        file_path=global_cfg_path,
+                        is_fixable=False,
+                    )
+                )
+
+        # 2. Local project configuration (.ot/config.local.json)
         local_cfg_path = self.project_root / ".ot" / "config.local.json"
         if local_cfg_path.is_file():
             try:
                 local_data = load_json_file(local_cfg_path)
+                local_schema = local_data.get("system", {}).get("configSchemaVersion")
+                if local_schema is not None:
+                    layer_schema_versions["local"] = local_schema
+                    if local_schema != 1:
+                        diagnostics.append(
+                            Diagnostic(
+                                severity=Severity.ERROR,
+                                category="config",
+                                message=f"Unsupported configuration schema version in {local_cfg_path.name}: {local_schema}",
+                                file_path=local_cfg_path,
+                                is_fixable=False,
+                            )
+                        )
                 violations = find_protected_key_violations(local_data)
                 for v in violations:
                     diagnostics.append(
@@ -142,21 +203,24 @@ class Validator:
                     )
                 )
 
+        # 3. Canonical project configuration (.ot/config.json)
         proj_cfg_path = self.project_root / ".ot" / "config.json"
         if proj_cfg_path.is_file():
             try:
                 proj_data = load_json_file(proj_cfg_path)
                 schema_version = proj_data.get("system", {}).get("configSchemaVersion")
-                if schema_version is not None and schema_version != 1:
-                    diagnostics.append(
-                        Diagnostic(
-                            severity=Severity.ERROR,
-                            category="config",
-                            message=f"Unsupported configuration schema version: {schema_version}",
-                            file_path=proj_cfg_path,
-                            is_fixable=False,
+                if schema_version is not None:
+                    layer_schema_versions["project"] = schema_version
+                    if schema_version != 1:
+                        diagnostics.append(
+                            Diagnostic(
+                                severity=Severity.ERROR,
+                                category="config",
+                                message=f"Unsupported configuration schema version: {schema_version}",
+                                file_path=proj_cfg_path,
+                                is_fixable=False,
+                            )
                         )
-                    )
             except Exception as e:
                 diagnostics.append(
                     Diagnostic(
@@ -167,6 +231,19 @@ class Validator:
                         is_fixable=False,
                     )
                 )
+
+        # 4. Cross-layer configSchemaVersion compatibility check
+        if len(set(layer_schema_versions.values())) > 1:
+            details = ", ".join(f"{layer}={ver}" for layer, ver in sorted(layer_schema_versions.items()))
+            diagnostics.append(
+                Diagnostic(
+                    severity=Severity.ERROR,
+                    category="config",
+                    message=f"Configuration schema version mismatch across layers ({details}).",
+                    file_path=proj_cfg_path,
+                    is_fixable=False,
+                )
+            )
 
         from ot.version import validate_project_version
         is_v_valid, v_err = validate_project_version(self.project_root)
@@ -503,19 +580,15 @@ class Repairer:
                     local_data = load_json_file(local_path)
                     proj_data = load_json_file(proj_path)
 
-                    # Move protected sections (e.g. workItem, system)
-                    for key in ["workItem", "meeting", "system", "project"]:
-                        if key in local_data:
-                            val = local_data.pop(key)
-                            if key not in proj_data:
-                                proj_data[key] = val
-                            elif isinstance(proj_data[key], dict) and isinstance(val, dict):
-                                proj_data[key].update(val)
-                            repairs_made.append(f"Moved protected configuration key '{key}' from config.local.json to config.json")
-
-                    proj_path.write_text(json.dumps(proj_data, indent=2), encoding="utf-8")
-                    local_path.write_text(json.dumps(local_data, indent=2), encoding="utf-8")
-                except Exception as e:
+                    new_local, new_proj, moved = relocate_protected_keys(local_data, proj_data)
+                    if moved:
+                        for key_path in moved:
+                            repairs_made.append(
+                                f"Moved protected configuration key '{key_path}' from config.local.json to config.json"
+                            )
+                        proj_path.write_text(json.dumps(new_proj, indent=2), encoding="utf-8")
+                        local_path.write_text(json.dumps(new_local, indent=2), encoding="utf-8")
+                except Exception:
                     pass
 
             # 3. WorkItem self-dependency removal
